@@ -17,8 +17,9 @@ use chrono::offset::utc::UTC;
 use chrono::datetime::DateTime;
 use std::path::Path;
 use rustc_serialize::base64::{STANDARD, ToBase64};
-use rustc_serialize::json;
+use rustc_serialize::json::{self, Json, ToJson};
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 enum TLSMessageType {
     Handshake = 22,
@@ -385,22 +386,17 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     //println!("Blob: {}", to_hex_string(tls.signed_blob.clone()));
     //println!("Signature: {}", to_hex_string(tls.signature.clone()));
 
-    let mut map = HashMap::new();
-    map.insert("blob", (&*tls.signed_blob).to_base64(STANDARD));
-    map.insert("signature", (&*tls.signature).to_base64(STANDARD));
-    map.insert("certificate", (&*tls.certs[0].buf).to_base64(STANDARD));
+    let mut obj = BTreeMap::new();
+    obj.insert("blob".to_string(), ((&*tls.signed_blob).to_base64(STANDARD)).to_json());
+    obj.insert("signature".to_string(), ((&*tls.signature).to_base64(STANDARD)).to_json());
 
-/*
-    println!(
-        "{}\"blob\": \"{}\", \"signature\": \"{}\", \"certificate\": \"{}\"{}",
-        "{",
-        (&*tls.signed_blob).to_base64(STANDARD),
-        (&*tls.signature).to_base64(STANDARD),
-        (&*tls.certs[0].buf).to_base64(STANDARD),
-        "}"
-            ); */
+    let mut cert_vec = Vec::new();
+    for cert in &tls.certs {
+        cert_vec.push(cert.buf.to_base64(STANDARD));
+    }
+    obj.insert("certificates".to_string(), cert_vec.to_json());
 
-    println!("{}", json::encode(&map).ok().expect("json serialization failure"));
+    println!("{}", json::encode(&Json::Object(obj)).ok().expect("json"));
 
     /*
     {
