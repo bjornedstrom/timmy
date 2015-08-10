@@ -13,6 +13,8 @@
 	$ sha256sum document
 	bf921b493168a...  document
 
+By default the program will use www.google.com:443 for signing, which as of writing (August 2015) work correctly. Some TLS servers may use implementations that do not include a valid timestamp.
+
 ## About
 
 The author (Björn) discovered this curiosity of the TLS protocol back in 2012, and wrote a blog post about it here: [blog.bjrn.se](http://blog.bjrn.se/2012/07/fun-with-tls-handshake.html). Now three years later he wanted to learn the Rust programming language and resumed the project.
