@@ -1,5 +1,6 @@
 extern crate crypto;
 extern crate getopts;
+extern crate chrono;
 
 use self::crypto::digest::Digest;
 use self::crypto::sha2::Sha256;
@@ -10,6 +11,22 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
+use chrono::naive::datetime::NaiveDateTime;
+use chrono::offset::utc::UTC;
+use chrono::datetime::DateTime;
+
+
+enum TLSMessageType {
+    Handshake = 22,
+}
+
+enum TLSHandshakeType {
+    ClientHello = 1,
+    ServerHello = 2,
+    Certificate = 11,
+    ServerKeyExchange = 12,
+}
+
 
 /*
 pub struct ClientHello {
@@ -27,11 +44,164 @@ impl ClientHello {
 }
 */
 
+fn timestamp_to_datetime(unix_timestamp: u32) -> DateTime<UTC> {
+    let naive_ts = NaiveDateTime::from_timestamp(unix_timestamp as i64, 0);
+    let ts = DateTime::<UTC>::from_utc(naive_ts, UTC);
+    ts
+}
+
 pub fn to_hex_string(bytes: Vec<u8>) -> String {
     let strs: Vec<String> = bytes.iter()
         .map(|b| format!("{:02x}", b))
         .collect();
     strs.connect("")
+}
+
+struct X509Certificate {
+    buf: Vec<u8>,
+}
+
+impl X509Certificate {
+    fn new(der: Vec<u8>) -> X509Certificate {
+        X509Certificate {
+            buf: der,
+        }
+    }
+}
+
+struct TLSHandshake {
+    client_random: Vec<u8>,
+    server_random: Vec<u8>,
+    certs: Vec<X509Certificate>,
+    cipher: u16,
+    signed_blob: Vec<u8>,
+    signature: Vec<u8>,
+}
+
+impl TLSHandshake {
+    fn new() -> TLSHandshake {
+        TLSHandshake {
+            client_random: Vec::new(),
+            server_random: Vec::new(),
+            certs: Vec::new(),
+            cipher: 0,
+            signed_blob: Vec::new(),
+            signature: Vec::new(),
+        }
+    }
+
+    fn get_signature(&self) -> &Vec<u8> {
+        &self.signature
+    }
+
+    fn get_unix_timestamp(&self) -> u32 {
+        let raw = &self.server_random;
+
+        ((raw[0] as u32) << 24) |
+        ((raw[1] as u32) << 16) |
+        ((raw[2] as u32) << 8) |
+        (raw[3] as u32)
+    }
+
+    fn parse_header(&mut self, parser: &mut BinaryParser, expected: TLSHandshakeType) -> usize {
+        // Common
+        let tls_type = parser.read_u8();
+        assert!(tls_type == TLSMessageType::Handshake as u8);
+
+        let tls_version =  parser.read_u16();
+        assert!(tls_version >= 0x0301); // TLS Version 1.0
+
+        let tls_length = parser.read_u16();
+
+        let msg_type = parser.read_u8();
+        assert!(msg_type == expected as u8);
+
+        let msg_length = parser.read_u24();
+        assert!(msg_length as usize == (tls_length as usize) - 4);
+
+        msg_length as usize
+    }
+
+    fn parse_server_hello(&mut self, parser: &mut BinaryParser) {
+        let msg_length = self.parse_header(parser, TLSHandshakeType::ServerHello);
+
+        // ServerHello
+        let version = parser.read_u16();
+        let server_random: Vec<u8> = parser.take(32).iter().cloned().collect();
+        self.server_random.extend(server_random);
+
+        let session_size = parser.read_u8() as usize;
+        let session: Vec<u8> = parser.take(session_size).iter().cloned().collect();
+
+        self.cipher = parser.read_u16();
+        let compression = parser.read_u8();
+
+        assert!(msg_length == 2 + 32 + 1 + session_size + 2 + 1);
+    }
+
+    fn parse_certificates(&mut self, parser: &mut BinaryParser) {
+        let msg_length = self.parse_header(parser, TLSHandshakeType::Certificate);
+
+        // Payload
+        let mut length = parser.read_u24() as usize;
+
+        assert!(length == msg_length - 3);
+
+        while length > 0 {
+            let length2 = parser.read_u24() as usize;
+            let cert = parser.take(length2).iter().cloned().collect();
+            //println!("cert {}", to_hex_string(&cert));
+
+            self.certs.push(X509Certificate::new(cert));
+
+            length -= 3 + length2;
+        }
+
+        assert!(length == 0);
+
+        for cert in &self.certs {
+            println!("cert {}", to_hex_string(cert.buf.clone()));
+        }
+    }
+
+    fn parse_server_key_exchange(&mut self, parser: &mut BinaryParser) {
+        let msg_length = self.parse_header(parser, TLSHandshakeType::ServerKeyExchange);
+
+        let ecc_params = match self.cipher {
+            0xc011 | 0xc012 | 0xc013 | 0xc014 => true,
+            _ => false,
+        };
+
+        assert!(ecc_params); // XXX
+
+        let pos = parser.tell();
+
+        if ecc_params {
+            let point_type = parser.read_u8();
+            let named_curve = parser.read_u16();
+            let length = parser.read_u8();
+            let point: Vec<u8> = parser.take(length as usize).iter().cloned().collect();
+        }
+
+        let enc_buf_len = parser.tell() - pos;
+        parser.seek(pos);
+
+        let enc_buf: Vec<u8> = parser.take(enc_buf_len).iter().cloned().collect();
+
+        println!("enc buf {}", to_hex_string(enc_buf.clone()));
+
+        // XXX
+        self.signed_blob.extend(self.client_random.clone());
+        self.signed_blob.extend(self.server_random.clone());
+        self.signed_blob.extend(enc_buf.clone());
+
+        let sig_len = parser.read_u16() as usize;
+        let signature: Vec<u8> = parser.take(sig_len).iter().cloned().collect();
+
+        self.signature.extend(signature.clone());
+
+        assert!(msg_length == enc_buf_len + 2 + sig_len);
+    }
 }
 
 struct BinaryParser<'a> {
@@ -48,6 +218,14 @@ impl<'a> BinaryParser<'a> {
             idx: 0,
             reader: reader,
         }
+    }
+
+    fn tell(&mut self) -> usize {
+        self.idx
+    }
+
+    fn seek(&mut self, pos: usize) {
+        self.idx = pos
     }
 
     fn buffer_up(&mut self) {
@@ -181,42 +359,30 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
     }
 
     let mut pars = BinaryParser::new(&mut tcpconn);
+    let mut tls = TLSHandshake::new();
 
-    println!("type {:x}", pars.read_u8());
-    println!("version {:x}", pars.read_u16());
-    println!("length {:x}", pars.read_u16());
+    // HACK
+    tls.client_random.extend(hash_buf[0..32].iter());
 
+    // Parse ServerHello
+    tls.parse_server_hello(&mut pars);
 
-    println!("msg_type {:x}", pars.read_u8());
-    println!("msg_length {:x}", pars.read_u24());
+    // Parse Certificates
+    tls.parse_certificates(&mut pars);
 
-    println!("version {:x}", pars.read_u16());
+    // Parse ServerKeyExchange
+    tls.parse_server_key_exchange(&mut pars);
 
-    println!("server random {}", to_hex_string(pars.take(32).iter().cloned().collect() ));
+    let unix_timestamp = tls.get_unix_timestamp();
 
-    println!("session {}", to_hex_string(pars.take( pars.read_u8() as usize  ).iter().cloned().collect() ));
+    println!("timestamp: {}", unix_timestamp);
 
+    //let naive_ts = NaiveDateTime::from_timestamp(unix_timestamp as i64, 0);
+    //let ts = DateTime::<UTC>::from_utc(naive_ts, UTC);
 
-    /*
-    let mut buf: [u8; 16000] = [0; 16000];
+    let ts = timestamp_to_datetime(unix_timestamp);
 
-    loop {
-        match tcpconn.read(&mut buf) {
-            Ok(0) => { break }
-            Ok(size) => {
-                println!("read {} bytes", size);
-
-                let mut pars = BinaryParser { buf: &buf, idx: 0, reader: &mut tcpconn };
-
-                println!("{:x}", pars.read_u32());
-
-                return; // XXX
-            }
-            // Makes sense?
-            Err(_) => { panic!("read failure!!!"); }
-        };
-    }
-    */
+    println!("{:?} (Unix Timestamp: {})", ts, unix_timestamp);
 
 }
 
