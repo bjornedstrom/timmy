@@ -1,25 +1,34 @@
+extern crate chrono;
 extern crate crypto;
 extern crate getopts;
-extern crate chrono;
 extern crate rustc_serialize;
 
-use self::crypto::digest::Digest;
-use self::crypto::sha2::Sha256;
+use chrono::datetime::DateTime;
+use chrono::naive::datetime::NaiveDateTime;
+use chrono::offset::utc::UTC;
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 use getopts::Options;
+use rustc_serialize::base64::{STANDARD, ToBase64};
+use rustc_serialize::json::{self, Json, ToJson};
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::env;
-use std::io;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::io;
 use std::net::TcpStream;
-use chrono::naive::datetime::NaiveDateTime;
-use chrono::offset::utc::UTC;
-use chrono::datetime::DateTime;
 use std::path::Path;
-use rustc_serialize::base64::{STANDARD, ToBase64};
-use rustc_serialize::json::{self, Json, ToJson};
-use std::collections::HashMap;
-use std::collections::BTreeMap;
+
+macro_rules! println_stderr(
+    ($($arg:tt)*) => (
+        match writeln!(&mut ::std::io::stderr(), $($arg)* ) {
+            Ok(_) => {},
+            Err(x) => panic!("Unable to write to stderr: {}", x),
+        }
+    )
+);
 
 enum TLSMessageType {
     Handshake = 22,
@@ -381,7 +390,8 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
 
     let unix_timestamp = tls.get_unix_timestamp();
     let ts = timestamp_to_datetime(unix_timestamp);
-    //println!("{:?} (Unix Timestamp: {})", ts, unix_timestamp);
+    println_stderr!("{} signed SHA-256 {} at {:?} (Unix Timestamp: {})",
+                    server, to_hex_string(hash_buf[0..32].iter().cloned().collect()), ts, unix_timestamp);
 
     //println!("Blob: {}", to_hex_string(tls.signed_blob.clone()));
     //println!("Signature: {}", to_hex_string(tls.signature.clone()));
@@ -442,7 +452,7 @@ fn main() {
     let mut opts = Options::new();
 
     opts.optopt("f", "file", "input file to sign [-]", "PATH");
-    opts.optopt("s", "server", "set server for signing [google.com]", "HOSTNAME");
+    opts.optopt("s", "server", "set server for signing [www.google.com]", "HOSTNAME");
     opts.optopt("p", "port", "set port for --server [443]", "PORT");
     opts.optopt("o", "output", "ouput file [data]", "PATH");
 
@@ -469,7 +479,7 @@ fn main() {
     let server = if matches.opt_present("s") {
         matches.opt_str("s").unwrap()
     } else {
-        "google.com".to_string()
+        "www.google.com".to_string()
     };
 
     // parse "port"
