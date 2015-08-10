@@ -8,9 +8,10 @@
 ## Usage
 
     $ timmy -f document
-	www.google.com signed SHA-256 bf921b493168a050884f723dc13fa4b1fc0afe95d06ce8cd4d66b4087204cbd0 at 2015-08-10T22:27:07Z (Unix Timestamp: 1439245627)
+	www.google.com signed SHA-256 bf921b493168a... at
+	  2015-08-10T22:27:07Z (Unix Timestamp: 1439245627)
 	$ sha256sum document
-	bf921b493168a050884f723dc13fa4b1fc0afe95d06ce8cd4d66b4087204cbd0  document
+	bf921b493168a...  document
 
 ## About
 
