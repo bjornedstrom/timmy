@@ -1,0 +1,10 @@
+[package]
+
+name = "timmy"
+version = "0.0.1"
+authors = [ "Björn Edström <be@bjrn.se>" ]
+
+[dependencies]
+
+getopts = "0.2"
+rust-crypto = "0.2.31"
