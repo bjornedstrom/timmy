@@ -1,6 +1,7 @@
 extern crate crypto;
 extern crate getopts;
 extern crate chrono;
+extern crate rustc_serialize;
 
 use self::crypto::digest::Digest;
 use self::crypto::sha2::Sha256;
@@ -14,7 +15,10 @@ use std::net::TcpStream;
 use chrono::naive::datetime::NaiveDateTime;
 use chrono::offset::utc::UTC;
 use chrono::datetime::DateTime;
-
+use std::path::Path;
+use rustc_serialize::base64::{STANDARD, ToBase64};
+use rustc_serialize::json;
+use std::collections::HashMap;
 
 enum TLSMessageType {
     Handshake = 22,
@@ -158,10 +162,6 @@ impl TLSHandshake {
         }
 
         assert!(length == 0);
-
-        for cert in &self.certs {
-            println!("cert {}", to_hex_string(cert.buf.clone()));
-        }
     }
 
     fn parse_server_key_exchange(&mut self, parser: &mut BinaryParser) {
@@ -188,7 +188,7 @@ impl TLSHandshake {
 
         let enc_buf: Vec<u8> = parser.take(enc_buf_len).iter().cloned().collect();
 
-        println!("enc buf {}", to_hex_string(enc_buf.clone()));
+        //println!("enc buf {}", to_hex_string(enc_buf.clone()));
 
         // XXX
         self.signed_blob.extend(self.client_random.clone());
@@ -233,7 +233,7 @@ impl<'a> BinaryParser<'a> {
 
         match self.reader.read(&mut arr) {
             Ok(size) => {
-                println!("read {} bytes", size);
+                //println!("read {} bytes", size);
 
                 self.buf.extend(arr[0..size].iter().cloned());
             }
@@ -248,7 +248,7 @@ impl<'a> BinaryParser<'a> {
         let cur = self.idx;
         self.idx = self.idx + num;
 
-        if self.buf.len() < self.idx {
+        while self.buf.len() < self.idx {
             self.buffer_up();
         }
 
@@ -288,10 +288,10 @@ impl<'a> BinaryParser<'a> {
 
 
 
-fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
+fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     let conn_str = format!("{}:{}", server, port);
 
-    println!("conn_str {}", conn_str);
+    //println!("conn_str {}", conn_str);
 
     let mut tcpconn = TcpStream::connect(&conn_str[..]).unwrap();
 
@@ -351,7 +351,7 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
 
     match tcpconn.write(&client_hello[0..60]) {
         Ok(size) => {
-            println!("wrote {} bytes", size);
+            //println!("wrote {} bytes", size);
         }
         Err(_) => {
             panic!("write failure!!!");
@@ -373,17 +373,51 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
     // Parse ServerKeyExchange
     tls.parse_server_key_exchange(&mut pars);
 
+    // Output
+    //for cert in &tls.certs {
+    //    println!("cert {}", to_hex_string(cert.buf.clone()));
+    //}
+
     let unix_timestamp = tls.get_unix_timestamp();
-
-    println!("timestamp: {}", unix_timestamp);
-
-    //let naive_ts = NaiveDateTime::from_timestamp(unix_timestamp as i64, 0);
-    //let ts = DateTime::<UTC>::from_utc(naive_ts, UTC);
-
     let ts = timestamp_to_datetime(unix_timestamp);
+    //println!("{:?} (Unix Timestamp: {})", ts, unix_timestamp);
 
-    println!("{:?} (Unix Timestamp: {})", ts, unix_timestamp);
+    //println!("Blob: {}", to_hex_string(tls.signed_blob.clone()));
+    //println!("Signature: {}", to_hex_string(tls.signature.clone()));
 
+    let mut map = HashMap::new();
+    map.insert("blob", (&*tls.signed_blob).to_base64(STANDARD));
+    map.insert("signature", (&*tls.signature).to_base64(STANDARD));
+    map.insert("certificate", (&*tls.certs[0].buf).to_base64(STANDARD));
+
+/*
+    println!(
+        "{}\"blob\": \"{}\", \"signature\": \"{}\", \"certificate\": \"{}\"{}",
+        "{",
+        (&*tls.signed_blob).to_base64(STANDARD),
+        (&*tls.signature).to_base64(STANDARD),
+        (&*tls.certs[0].buf).to_base64(STANDARD),
+        "}"
+            ); */
+
+    println!("{}", json::encode(&map).ok().expect("json serialization failure"));
+
+    /*
+    {
+        let mut f = File::create("data.blob").ok().expect("fail.");
+        f.write_all(&*tls.signed_blob);
+    }
+
+    {
+        let mut f = File::create("data.signature").ok().expect("fail.");
+        f.write_all(&*tls.signature);
+    }
+
+    {
+        let mut f = File::create("data.certificate.der").ok().expect("fail.");
+        f.write_all(&*tls.certs[0].buf);
+    }
+    */
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
@@ -414,6 +448,7 @@ fn main() {
     opts.optopt("f", "file", "input file to sign [-]", "PATH");
     opts.optopt("s", "server", "set server for signing [google.com]", "HOSTNAME");
     opts.optopt("p", "port", "set port for --server [443]", "PORT");
+    opts.optopt("o", "output", "ouput file [data]", "PATH");
 
     opts.optflag("h", "help", "print this help menu");
 
@@ -426,6 +461,13 @@ fn main() {
         print_usage(&program, opts);
         return;
     }
+
+    // parse "output"
+    let output = if matches.opt_present("o") {
+        matches.opt_str("o").unwrap()
+    } else {
+        "data".to_string()
+    };
 
     // parse "server"
     let server = if matches.opt_present("s") {
@@ -472,5 +514,5 @@ fn main() {
     let mut hash_buf: [u8; 32] = [0; 32];
     hasher.result(&mut hash_buf);
 
-    perform(&server, &port, &hash_buf);
+    perform(&server, &port, &hash_buf, &output);
 }
