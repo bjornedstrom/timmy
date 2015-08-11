@@ -368,7 +368,7 @@ enum ASN1Type {
     Null,
     Sequence(Vec<ASN1Type>),
     Set(Vec<ASN1Type>),
-    Object(Vec<u8>),
+    Object(Vec<u32>),
     Integer(Vec<u8>),
     BitString(Vec<u8>),
     PrintableString(String),
@@ -489,7 +489,33 @@ impl DerParser {
                 ASN1Type::Set(sequence)
             },
             2 => ASN1Type::Integer(raw.expect("...")),
-            6 => ASN1Type::Object(raw.expect("...")),
+            6 => {
+                let mut oi = Vec::<u32>::new();
+                let mut obj_bytes = raw.expect("...");
+                oi.push((obj_bytes[0] / 40) as u32);
+                oi.push((obj_bytes[0] % 40) as u32);
+                let mut i = 1;
+                while i < obj_bytes.len() {
+                    if obj_bytes[i] <= 127 {
+                        oi.push(obj_bytes[i] as u32);
+                        i += 1;
+                    } else {
+                        let mut oint: u32 = 0;
+                        let mut next_sub_id: u32 = obj_bytes[i] as u32;
+                        let mut sub_id: u32 = 0;
+                        i += 1;
+
+                        while next_sub_id > 127 {
+                            sub_id <<= 7;
+                            sub_id |= next_sub_id & 127;
+                            next_sub_id = obj_bytes[i] as u32;
+                            i += 1;
+                        }
+                        oi.push((sub_id << 7) | next_sub_id);
+                    }
+                }
+                ASN1Type::Object(oi)
+            },
             3 => ASN1Type::BitString(raw.expect("...")),
             19 => ASN1Type::PrintableString(String::from_utf8(raw.expect("...")).unwrap()),
             23 => ASN1Type::UTCTime(String::from_utf8(raw.expect("...")).unwrap()),
