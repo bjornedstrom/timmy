@@ -366,8 +366,8 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
 enum ASN1Type {
     Unknown,
     Null,
-    Sequence,
-    Set,
+    Sequence(Vec<ASN1Type>),
+    Set(Vec<ASN1Type>),
     Object(Vec<u8>),
     Integer(Vec<u8>),
     BitString(Vec<u8>),
@@ -427,9 +427,9 @@ impl DerParser {
         //}
     }
 
-    fn parse_entry(&mut self) {
+    fn parse_entry(&mut self) -> Option<ASN1Type> {
         if self.idx >= self.buf.len() {
-            return;
+            return None;
         }
 
 
@@ -443,7 +443,7 @@ impl DerParser {
             2 => {
                 // TODO: ignore for now
                 self.idx += length;
-                return;
+                return Some(ASN1Type::Unknown);
             }
             _ => {
                 println!("wtf");
@@ -451,24 +451,46 @@ impl DerParser {
         }
 
         let raw = match constructed {
-            false => {
+            false | true => {
                 let pos = self.idx;
                 self.idx += length;
 
                 Some(self.buf[pos..pos+length].iter().cloned().collect())
             },
-            _ => {
-                None
-            },
+            //_ => {
+            //    None
+            //},
         };
 
         let entry = match tag {
             5 => ASN1Type::Null,
-            16 => ASN1Type::Sequence,
+            16 => {
+                let mut sub_parser = DerParser::new(&raw.expect("..."));
+                let mut sequence = Vec::<ASN1Type>::new();
+                loop {
+                    let sub_ent = sub_parser.parse_entry();
+                    match sub_ent {
+                        None => { break },
+                        Some(ent) => { sequence.push(ent) }
+                    }
+                }
+                ASN1Type::Sequence(sequence)
+            },
+            17 => {
+                let mut sub_parser = DerParser::new(&raw.expect("..."));
+                let mut sequence = Vec::<ASN1Type>::new();
+                loop {
+                    let sub_ent = sub_parser.parse_entry();
+                    match sub_ent {
+                        None => { break },
+                        Some(ent) => { sequence.push(ent) }
+                    }
+                }
+                ASN1Type::Set(sequence)
+            },
             2 => ASN1Type::Integer(raw.expect("...")),
             6 => ASN1Type::Object(raw.expect("...")),
             3 => ASN1Type::BitString(raw.expect("...")),
-            17 => ASN1Type::Set,
             19 => ASN1Type::PrintableString(String::from_utf8(raw.expect("...")).unwrap()),
             23 => ASN1Type::UTCTime(String::from_utf8(raw.expect("...")).unwrap()),
             12 => ASN1Type::UTF8String(String::from_utf8(raw.expect("...")).unwrap()),
@@ -478,7 +500,9 @@ impl DerParser {
             }
         };
 
-        println!("{:?}", entry);
+        //println!("{:?}", entry);
+
+        Some(entry)
     }
 }
 
@@ -561,9 +585,11 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
 
     let mut derparser = DerParser::new(&tls.certs[0].buf);
 
-    for u in 0..100 {
-        derparser.parse_entry();
-    }
+    //for u in 0..100 {
+    let entry = derparser.parse_entry();
+    //}
+
+    println!("{:?}", entry);
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
