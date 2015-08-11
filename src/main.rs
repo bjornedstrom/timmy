@@ -1,3 +1,6 @@
+// Copyright (c) Björn Edström <be@bjrn.se> 2015.
+// See LICENSE for details.
+
 extern crate chrono;
 extern crate crypto;
 extern crate getopts;
