@@ -214,6 +214,33 @@ impl TLSHandshake {
     }
 }
 
+struct SimpleBinaryWriter {
+    buf: Vec<u8>,
+}
+
+impl SimpleBinaryWriter {
+    fn new() -> SimpleBinaryWriter {
+        SimpleBinaryWriter {
+            buf: Vec::new(),
+        }
+    }
+
+    fn put_u8(&mut self, a: u8) {
+        self.buf.push(a);
+    }
+
+    fn put_u16(&mut self, a: u16) {
+        self.put_u8((a >> 8) as u8);
+        self.put_u8((a & 0xff) as u8);
+    }
+
+    fn put_u24(&mut self, a: u32) {
+        self.put_u8(((a >> 16) & 0xff) as u8);
+        self.put_u8(((a >> 8) & 0xff) as u8);
+        self.put_u8((a & 0xff) as u8);
+    }
+}
+
 struct BinaryParser<'a> {
     //buf: &'a [u8],
     buf: Vec<u8>,
@@ -296,7 +323,96 @@ impl<'a> BinaryParser<'a> {
     }
 }
 
+fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32]) {
+    ch.put_u8(TLSMessageType::Handshake as u8);
+    ch.put_u16(0x0301);
+    ch.put_u16(0); // Length 1
+    ch.put_u8(TLSHandshakeType::ClientHello as u8);
+    ch.put_u24(0); // Length 2
+    ch.put_u16(0x0301);
+    ch.buf.extend(&hash_buf[0..32]);
+    ch.put_u8(0);
 
+    // cipher suits
+    let cipher_suits = vec![
+        0x0033,
+        0xc011,
+        0xc012,
+        0xc013,
+        0xc014,
+        ];
+    ch.put_u16((cipher_suits.len() * 2) as u16); // 5 * 2
+    for cipher in &cipher_suits {
+        ch.put_u16(*cipher);
+    }
+
+    // Compression
+    ch.put_u8(1);
+    ch.put_u8(0x00);
+
+    // Extensions
+    ch.put_u16(0);
+
+    // HACK: fixup length fields
+    let size = ch.buf.len();
+    ch.buf[4] = (size - 5) as u8; // only works if size < one byte
+    ch.buf[8] = (size - 9) as u8;
+}
+
+
+struct DerParser {
+    buf: Vec<u8>,
+    idx: usize,
+}
+
+impl DerParser {
+    fn new(der: &Vec<u8>) -> DerParser {
+        DerParser {
+            buf: der.clone(),
+            idx: 0,
+        }
+    }
+
+    fn parse_header(&mut self) {
+        let c = self.buf[self.idx];
+        let tag = c & 31;
+        let p_c = (c >> 5) & 1;
+        let class_ = (c >> 6) & 3;
+        assert!(tag != 31);
+
+        println!("{} {} {}", class_, p_c, tag);
+
+        self.idx += 1;
+
+        match class_ {
+            0 => {
+                // get length
+                let len_tmp = self.buf[self.idx];
+                assert!(len_tmp >> 7 == 1);
+                let len_octets = len_tmp & 127;
+                assert!(len_octets <= 3);
+                let mut length = 0 as usize;
+                self.idx += 1;
+                println!("len octets {}", len_octets);
+                for _ in 0..len_octets {
+                    length <<= 8;
+                    length |= (self.buf[self.idx] as usize);
+                    self.idx += 1;
+                }
+
+                println!("{} {} {} {}", class_, p_c, tag, length);
+            }
+            2 => {
+                println!("cont {} {} {} {} {} {}", tag, self.buf[self.idx], self.buf[self.idx+1], self.buf[self.idx+2], self.buf[self.idx+3], self.buf[self.idx+4]);
+
+                
+            }
+            _ => {
+                println!("wtf");
+            }
+        }
+    }
+}
 
 fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     let conn_str = format!("{}:{}", server, port);
@@ -305,61 +421,11 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
 
     let mut tcpconn = TcpStream::connect(&conn_str[..]).unwrap();
 
-    // ClientHello
-    let mut client_hello: [u8; 512] = [0; 512];
+    // Construct our special ClientHello message
+    let mut ch = SimpleBinaryWriter::new();
+    create_special_client_hello(&mut ch, &hash_buf);
 
-    // 60 ['\x16\x03\x01\x007\x01\x00\x003\x03\x01foo\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\n\x003\xc0\x11\xc0\x12\xc0\x13\xc0\x14\x01\x00\x00\x00']
-
-    client_hello[0] = 22; // TLS_CONTENT_HANDSHAKE
-    client_hello[1] = 0x03; // version
-    client_hello[2] = 0x01; // version
-    // 3, 4 = length 1
-    client_hello[3] = 0x00;
-    client_hello[4] = 55;
-
-    client_hello[5] = 0x01; // TLS_HANDSHAKE_CLIENT_HELLO
-    // 6,7,8 = length 2
-    client_hello[6] = 0;
-    client_hello[7] = 0;
-    client_hello[8] = 51;
-
-    client_hello[9] = 0x03; // version
-    client_hello[10] = 0x01; // version
-
-    for i in 0..32 {
-        client_hello[11 + i] = hash_buf[i];
-    }
-
-    client_hello[43] = 0;
-
-    // cipher suits
-    client_hello[44] = 0x00;
-    client_hello[45] = 0x0a;
-
-    client_hello[46] = 0x00; // TLS_DHE_RSA_WITH_AES_128_CBC_SHA
-    client_hello[47] = 0x33;
-
-    client_hello[48] = 0xc0; // TLS_ECDHE_RSA_WITH_RC4_128_SHA
-    client_hello[49] = 0x11;
-
-    client_hello[50] = 0xc0; // TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
-    client_hello[51] = 0x12;
-
-    client_hello[52] = 0xc0; // TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
-    client_hello[53] = 0x13;
-
-    client_hello[54] = 0xc0; // TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
-    client_hello[55] = 0x14;
-
-    // compression
-    client_hello[56] = 0x01;
-    client_hello[57] = 0x00;
-
-    // extensions
-    client_hello[58] = 0x00;
-    client_hello[59] = 0x00;
-
-    match tcpconn.write(&client_hello[0..60]) {
+    match tcpconn.write(&ch.buf) {
         Ok(size) => {
             //println!("wrote {} bytes", size);
         }
@@ -424,6 +490,12 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
         f.write_all(&*tls.certs[0].buf);
     }
     */
+
+    let mut derparser = DerParser::new(&tls.certs[0].buf);
+    derparser.parse_header();
+    derparser.parse_header();
+    derparser.parse_header();
+    derparser.parse_header();
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
