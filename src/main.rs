@@ -370,9 +370,10 @@ enum ASN1Type {
     Set,
     Object(Vec<u8>),
     Integer(Vec<u8>),
-    PrintableString(Vec<u8>),
-    UTF8String(Vec<u8>),
-    UTCTime(Vec<u8>),
+    BitString(Vec<u8>),
+    PrintableString(String),
+    UTF8String(String),
+    UTCTime(String),
 }
 
 struct DerParser {
@@ -416,7 +417,7 @@ impl DerParser {
         self.idx += 1;
         let length = self.get_length();
 
-        //println!("{} {} {} {}", class_, p_c, tag, length);
+        println!("{} {} {} {}", class_, p_c, tag, length);
 
         (class_ as u8, p_c == 1, tag as u8, length as usize)
 
@@ -427,6 +428,11 @@ impl DerParser {
     }
 
     fn parse_entry(&mut self) {
+        if self.idx >= self.buf.len() {
+            return;
+        }
+
+
         let (class_bits, constructed, tag, length) = self.parse_header();
 
         assert!(class_bits == 0 || class_bits == 2);
@@ -461,10 +467,11 @@ impl DerParser {
             16 => ASN1Type::Sequence,
             2 => ASN1Type::Integer(raw.expect("...")),
             6 => ASN1Type::Object(raw.expect("...")),
+            3 => ASN1Type::BitString(raw.expect("...")),
             17 => ASN1Type::Set,
-            19 => ASN1Type::PrintableString(raw.expect("...")),
-            23 => ASN1Type::UTCTime(raw.expect("...")),
-            12 => ASN1Type::UTF8String(raw.expect("...")),
+            19 => ASN1Type::PrintableString(String::from_utf8(raw.expect("...")).unwrap()),
+            23 => ASN1Type::UTCTime(String::from_utf8(raw.expect("...")).unwrap()),
+            12 => ASN1Type::UTF8String(String::from_utf8(raw.expect("...")).unwrap()),
             _ => {
                 println!("{} {} {} {}", class_bits, constructed, tag, length);
                 ASN1Type::Unknown
@@ -554,7 +561,7 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
 
     let mut derparser = DerParser::new(&tls.certs[0].buf);
 
-    for u in 0..30 {
+    for u in 0..100 {
         derparser.parse_entry();
     }
 }
