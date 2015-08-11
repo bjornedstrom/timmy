@@ -359,6 +359,18 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
     ch.buf[8] = (size - 9) as u8;
 }
 
+#[derive(Debug)]
+enum ASN1Type {
+    Unknown,
+    Null,
+    Sequence,
+    Set,
+    Object(Vec<u8>),
+    Integer(Vec<u8>),
+    PrintableString(Vec<u8>),
+    UTF8String(Vec<u8>),
+    UTCTime(Vec<u8>),
+}
 
 struct DerParser {
     buf: Vec<u8>,
@@ -373,44 +385,90 @@ impl DerParser {
         }
     }
 
-    fn parse_header(&mut self) {
+    fn get_length(&mut self) -> usize {
+        let len_tmp = self.buf[self.idx];
+        if len_tmp <= 127 {
+            self.idx += 1;
+            return len_tmp as usize;
+        }
+
+        let len_octets = len_tmp & 127;
+        assert!(len_octets <= 3);
+        let mut length = 0 as usize;
+        self.idx += 1;
+        for _ in 0..len_octets {
+            length <<= 8;
+            length |= self.buf[self.idx] as usize;
+            self.idx += 1;
+        }
+        length
+    }
+
+    fn parse_header(&mut self) -> (u8, bool, u8, usize) {
         let c = self.buf[self.idx];
         let tag = c & 31;
         let p_c = (c >> 5) & 1;
         let class_ = (c >> 6) & 3;
         assert!(tag != 31);
-
-        println!("{} {} {}", class_, p_c, tag);
-
         self.idx += 1;
+        let length = self.get_length();
 
-        match class_ {
+        //println!("{} {} {} {}", class_, p_c, tag, length);
+
+        (class_ as u8, p_c == 1, tag as u8, length as usize)
+
+        // ignore [ ]
+        //if tag == 2 {
+        //    self.idx += length;
+        //}
+    }
+
+    fn parse_entry(&mut self) {
+        let (class_bits, constructed, tag, length) = self.parse_header();
+
+        assert!(class_bits == 0 || class_bits == 2);
+
+        match class_bits {
             0 => {
-                // get length
-                let len_tmp = self.buf[self.idx];
-                assert!(len_tmp >> 7 == 1);
-                let len_octets = len_tmp & 127;
-                assert!(len_octets <= 3);
-                let mut length = 0 as usize;
-                self.idx += 1;
-                println!("len octets {}", len_octets);
-                for _ in 0..len_octets {
-                    length <<= 8;
-                    length |= (self.buf[self.idx] as usize);
-                    self.idx += 1;
-                }
-
-                println!("{} {} {} {}", class_, p_c, tag, length);
             }
             2 => {
-                println!("cont {} {} {} {} {} {}", tag, self.buf[self.idx], self.buf[self.idx+1], self.buf[self.idx+2], self.buf[self.idx+3], self.buf[self.idx+4]);
-
-                
+                // TODO: ignore for now
+                self.idx += length;
+                return;
             }
             _ => {
                 println!("wtf");
             }
         }
+
+        let raw = match constructed {
+            false => {
+                let pos = self.idx;
+                self.idx += length;
+
+                Some(self.buf[pos..pos+length].iter().cloned().collect())
+            },
+            _ => {
+                None
+            },
+        };
+
+        let entry = match tag {
+            5 => ASN1Type::Null,
+            16 => ASN1Type::Sequence,
+            2 => ASN1Type::Integer(raw.expect("...")),
+            6 => ASN1Type::Object(raw.expect("...")),
+            17 => ASN1Type::Set,
+            19 => ASN1Type::PrintableString(raw.expect("...")),
+            23 => ASN1Type::UTCTime(raw.expect("...")),
+            12 => ASN1Type::UTF8String(raw.expect("...")),
+            _ => {
+                println!("{} {} {} {}", class_bits, constructed, tag, length);
+                ASN1Type::Unknown
+            }
+        };
+
+        println!("{:?}", entry);
     }
 }
 
@@ -492,10 +550,10 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     */
 
     let mut derparser = DerParser::new(&tls.certs[0].buf);
-    derparser.parse_header();
-    derparser.parse_header();
-    derparser.parse_header();
-    derparser.parse_header();
+
+    for u in 0..30 {
+        derparser.parse_entry();
+    }
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
