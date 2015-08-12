@@ -364,7 +364,7 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
 
 #[derive(Debug)]
 enum ASN1Type {
-    Unknown,
+    Unknown(Vec<u8>),
     Null,
     Sequence(Vec<ASN1Type>),
     Set(Vec<ASN1Type>),
@@ -417,7 +417,7 @@ impl DerParser {
         self.idx += 1;
         let length = self.get_length();
 
-        println!("{} {} {} {}", class_, p_c, tag, length);
+        //println!("{} {} {} {}", class_, p_c, tag, length);
 
         (class_ as u8, p_c == 1, tag as u8, length as usize)
 
@@ -442,8 +442,10 @@ impl DerParser {
             }
             2 => {
                 // TODO: ignore for now
+                println!("{} {} {} {}", class_bits, constructed, tag, length);
+                let pos = self.idx;
                 self.idx += length;
-                return Some(ASN1Type::Unknown);
+                return Some(ASN1Type::Unknown(self.buf[pos..pos+length].iter().cloned().collect()));
             }
             _ => {
                 println!("wtf");
@@ -500,11 +502,9 @@ impl DerParser {
                         oi.push(obj_bytes[i] as u32);
                         i += 1;
                     } else {
-                        let mut oint: u32 = 0;
                         let mut next_sub_id: u32 = obj_bytes[i] as u32;
                         let mut sub_id: u32 = 0;
                         i += 1;
-
                         while next_sub_id > 127 {
                             sub_id <<= 7;
                             sub_id |= next_sub_id & 127;
@@ -522,7 +522,7 @@ impl DerParser {
             12 => ASN1Type::UTF8String(String::from_utf8(raw.expect("...")).unwrap()),
             _ => {
                 println!("{} {} {} {}", class_bits, constructed, tag, length);
-                ASN1Type::Unknown
+                ASN1Type::Unknown(Vec::new())
             }
         };
 
