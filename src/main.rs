@@ -5,6 +5,7 @@ extern crate chrono;
 extern crate crypto;
 extern crate getopts;
 extern crate rustc_serialize;
+extern crate num;
 
 use chrono::datetime::DateTime;
 use chrono::naive::datetime::NaiveDateTime;
@@ -23,6 +24,7 @@ use std::io::Write;
 use std::io;
 use std::net::TcpStream;
 use std::path::Path;
+use num::bigint::{BigInt, Sign};
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => (
@@ -364,13 +366,16 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
 
 #[derive(Debug)]
 enum ASN1Type {
-    Unknown(Vec<u8>),
+    Unknown,
+    Cont(u8, Box<ASN1Type>),
     Null,
+    Boolean(bool),
     Sequence(Vec<ASN1Type>),
     Set(Vec<ASN1Type>),
     Object(Vec<u32>),
-    Integer(Vec<u8>),
+    Integer(BigInt),
     BitString(Vec<u8>),
+    OctetString(Vec<u8>),
     PrintableString(String),
     UTF8String(String),
     UTCTime(String),
@@ -445,7 +450,10 @@ impl DerParser {
                 println!("{} {} {} {}", class_bits, constructed, tag, length);
                 let pos = self.idx;
                 self.idx += length;
-                return Some(ASN1Type::Unknown(self.buf[pos..pos+length].iter().cloned().collect()));
+
+                let sub_buf = self.buf[pos..pos+length].iter().cloned().collect();
+                let mut sub_parser = DerParser::new(&sub_buf);
+                return Some(ASN1Type::Cont(tag, Box::new( sub_parser.parse_entry().expect("...") )  ));
             }
             _ => {
                 println!("wtf");
@@ -466,6 +474,10 @@ impl DerParser {
 
         let entry = match tag {
             5 => ASN1Type::Null,
+            1 => {
+                let buf: Vec<u8> = raw.expect("...");
+                ASN1Type::Boolean(buf[0] == 0xff)
+            }
             16 => {
                 let mut sub_parser = DerParser::new(&raw.expect("..."));
                 let mut sequence = Vec::<ASN1Type>::new();
@@ -490,7 +502,7 @@ impl DerParser {
                 }
                 ASN1Type::Set(sequence)
             },
-            2 => ASN1Type::Integer(raw.expect("...")),
+            2 => ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw.expect("..."))),
             6 => {
                 let mut oi = Vec::<u32>::new();
                 let mut obj_bytes = raw.expect("...");
@@ -517,12 +529,13 @@ impl DerParser {
                 ASN1Type::Object(oi)
             },
             3 => ASN1Type::BitString(raw.expect("...")),
+            4 => ASN1Type::OctetString(raw.expect("...")),
             19 => ASN1Type::PrintableString(String::from_utf8(raw.expect("...")).unwrap()),
             23 => ASN1Type::UTCTime(String::from_utf8(raw.expect("...")).unwrap()),
             12 => ASN1Type::UTF8String(String::from_utf8(raw.expect("...")).unwrap()),
             _ => {
                 println!("{} {} {} {}", class_bits, constructed, tag, length);
-                ASN1Type::Unknown(Vec::new())
+                ASN1Type::Unknown
             }
         };
 

@@ -6,6 +6,7 @@ authors = [ "Björn Edström <be@bjrn.se>" ]
 
 [dependencies]
 
+num = "*"
 getopts = "0.2"
 rust-crypto = "0.2.31"
 chrono = "0.2"
