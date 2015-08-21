@@ -384,19 +384,32 @@ enum ASN1Type {
 fn parse_x509(tree: ASN1Type) {
     //println!("{:?}", tree);
 
+    // Slice patterns are experimental right now, so lets do this
+    // awkwardly.
     match tree {
         ASN1Type::Sequence(body) => {
-	    //let ref body0 = &body[0];
-	    match body[0] {
-	        ASN1Type::Sequence(ref part0) => {
-		    for ent in &*part0 {
-	            	println!("seq {:?}", ent);
-	   	    }
-		}
-		_ => {}
-	    }
-	}
-	_ => {}
+            match body[0] {
+                ASN1Type::Sequence(ref part0) => {
+                    //for ent in &*part0 {
+                    //    println!("seq {:?}", ent);
+                    //}
+
+                    let ref tbs = *part0;
+
+                    let ref version = tbs[0];
+                    let ref serialNumber = tbs[1];
+                    let ref signature = tbs[2];
+                    let ref issuer = tbs[3];
+                    let ref validity = tbs[4];
+                    let ref subject = tbs[5];
+                    let ref subjectPublicKeyInfo = tbs[6];
+
+                    println!("{:?}", *subject);
+                }
+                _ => {}
+            }
+        }
+        _ => {}
     }
 }
 
