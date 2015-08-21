@@ -7,6 +7,8 @@ extern crate getopts;
 extern crate rustc_serialize;
 extern crate num;
 
+mod tup;
+
 use chrono::datetime::DateTime;
 use chrono::naive::datetime::NaiveDateTime;
 use chrono::offset::utc::UTC;
@@ -21,10 +23,12 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::fmt::Write as FmtWrite;
 use std::io;
 use std::net::TcpStream;
 use std::path::Path;
 use num::bigint::{BigInt, Sign};
+use tup::*;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => (
@@ -364,6 +368,7 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
     ch.buf[8] = (size - 9) as u8;
 }
 
+
 #[derive(Debug)]
 enum ASN1Type {
     Unknown,
@@ -372,7 +377,7 @@ enum ASN1Type {
     Boolean(bool),
     Sequence(Vec<ASN1Type>),
     Set(Vec<ASN1Type>),
-    Object(Vec<u32>),
+    Object(TupT<u32>),
     Integer(BigInt),
     BitString(Vec<u8>),
     OctetString(Vec<u8>),
@@ -381,8 +386,58 @@ enum ASN1Type {
     UTCTime(String),
 }
 
+fn asn1_to_raw_string(obj: &ASN1Type) -> Option<String> {
+    match obj {
+        &ASN1Type::PrintableString(ref string) => Some(string.clone()),
+        &ASN1Type::UTF8String(ref string) => Some(string.clone()),
+        _ => None,
+    }
+}
+
+fn x509_oid_to_str(oid: &ASN1Type) -> String {
+
+    //let foo = vec![2, 5, 4, 6];
+
+    let ret = match oid {
+        &ASN1Type::Object(Tup::T4(2, 5, 4, 6)) => "C",
+        &ASN1Type::Object(Tup::T4(2, 5, 4, 8)) => "ST",
+        &ASN1Type::Object(Tup::T4(2, 5, 4, 7)) => "L",
+        &ASN1Type::Object(Tup::T4(2, 5, 4, 10)) => "O",
+        &ASN1Type::Object(Tup::T4(2, 5, 4, 3)) => "CN",
+        _ => "unknown"
+    };
+
+    ret.to_string()
+}
+
+fn x509_subject_to_string(subject: &ASN1Type) -> String {
+    let mut result_string = "".to_string();
+
+    match subject {
+        &ASN1Type::Sequence(ref parts) => {
+            for ent in &*parts {
+                if let &ASN1Type::Set(ref seq) = ent {
+                    //println!("{:?}", seq[0]);
+
+                    let ref seq0 = seq[0];
+                    if let ASN1Type::Sequence(ref obj_str) = *seq0 {
+
+                        let oid_str = x509_oid_to_str(&obj_str[0]);
+                        if let Some(value) = asn1_to_raw_string(&obj_str[1]) {
+                            write!(&mut result_string, "{}={}/", oid_str, value).unwrap();
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    result_string
+}
+
 fn parse_x509(tree: ASN1Type) {
-    //println!("{:?}", tree);
+    println!("{:?}", tree);
 
     // Slice patterns are experimental right now, so lets do this
     // awkwardly.
@@ -404,7 +459,8 @@ fn parse_x509(tree: ASN1Type) {
                     let ref subject = tbs[5];
                     let ref subjectPublicKeyInfo = tbs[6];
 
-                    println!("{:?}", *subject);
+                    //println!("{:?}", *subject);
+                    println!("{}", x509_subject_to_string(subject));
                 }
                 _ => {}
             }
@@ -552,7 +608,7 @@ impl DerParser {
                         oi.push((sub_id << 7) | next_sub_id);
                     }
                 }
-                ASN1Type::Object(oi)
+                ASN1Type::Object(vec_to_tup(&oi).expect("..."))
             },
             3 => ASN1Type::BitString(raw),
             4 => ASN1Type::OctetString(raw),
