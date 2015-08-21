@@ -69,7 +69,7 @@ fn timestamp_to_datetime(unix_timestamp: u32) -> DateTime<UTC> {
     ts
 }
 
-pub fn to_hex_string(bytes: Vec<u8>) -> String {
+pub fn to_hex_string(bytes: &Vec<u8>) -> String {
     let strs: Vec<String> = bytes.iter()
         .map(|b| format!("{:02x}", b))
         .collect();
@@ -381,6 +381,25 @@ enum ASN1Type {
     UTCTime(String),
 }
 
+fn parse_x509(tree: ASN1Type) {
+    //println!("{:?}", tree);
+
+    match tree {
+        ASN1Type::Sequence(body) => {
+	    //let ref body0 = &body[0];
+	    match body[0] {
+	        ASN1Type::Sequence(ref part0) => {
+		    for ent in &*part0 {
+	            	println!("seq {:?}", ent);
+	   	    }
+		}
+		_ => {}
+	    }
+	}
+	_ => {}
+    }
+}
+
 struct DerParser {
     buf: Vec<u8>,
     idx: usize,
@@ -432,7 +451,7 @@ impl DerParser {
         //}
     }
 
-    fn parse_entry(&mut self) -> Option<ASN1Type> {
+    pub fn parse_entry(&mut self) -> Option<ASN1Type> {
         if self.idx >= self.buf.len() {
             return None;
         }
@@ -460,26 +479,20 @@ impl DerParser {
             }
         }
 
-        let raw = match constructed {
-            false | true => {
-                let pos = self.idx;
-                self.idx += length;
+        let pos = self.idx;
+        self.idx += length;
 
-                Some(self.buf[pos..pos+length].iter().cloned().collect())
-            },
-            //_ => {
-            //    None
-            //},
-        };
+        let raw = self.buf[pos..pos+length].iter().cloned().collect();
+
 
         let entry = match tag {
             5 => ASN1Type::Null,
             1 => {
-                let buf: Vec<u8> = raw.expect("...");
+                let buf: Vec<u8> = raw;
                 ASN1Type::Boolean(buf[0] == 0xff)
             }
             16 => {
-                let mut sub_parser = DerParser::new(&raw.expect("..."));
+                let mut sub_parser = DerParser::new(&raw);
                 let mut sequence = Vec::<ASN1Type>::new();
                 loop {
                     let sub_ent = sub_parser.parse_entry();
@@ -491,7 +504,7 @@ impl DerParser {
                 ASN1Type::Sequence(sequence)
             },
             17 => {
-                let mut sub_parser = DerParser::new(&raw.expect("..."));
+                let mut sub_parser = DerParser::new(&raw);
                 let mut sequence = Vec::<ASN1Type>::new();
                 loop {
                     let sub_ent = sub_parser.parse_entry();
@@ -502,10 +515,10 @@ impl DerParser {
                 }
                 ASN1Type::Set(sequence)
             },
-            2 => ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw.expect("..."))),
+            2 => ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw)),
             6 => {
                 let mut oi = Vec::<u32>::new();
-                let mut obj_bytes = raw.expect("...");
+                let mut obj_bytes = raw;
                 oi.push((obj_bytes[0] / 40) as u32);
                 oi.push((obj_bytes[0] % 40) as u32);
                 let mut i = 1;
@@ -528,11 +541,11 @@ impl DerParser {
                 }
                 ASN1Type::Object(oi)
             },
-            3 => ASN1Type::BitString(raw.expect("...")),
-            4 => ASN1Type::OctetString(raw.expect("...")),
-            19 => ASN1Type::PrintableString(String::from_utf8(raw.expect("...")).unwrap()),
-            23 => ASN1Type::UTCTime(String::from_utf8(raw.expect("...")).unwrap()),
-            12 => ASN1Type::UTF8String(String::from_utf8(raw.expect("...")).unwrap()),
+            3 => ASN1Type::BitString(raw),
+            4 => ASN1Type::OctetString(raw),
+            19 => ASN1Type::PrintableString(String::from_utf8(raw).unwrap()),
+            23 => ASN1Type::UTCTime(String::from_utf8(raw).unwrap()),
+            12 => ASN1Type::UTF8String(String::from_utf8(raw).unwrap()),
             _ => {
                 println!("{} {} {} {}", class_bits, constructed, tag, length);
                 ASN1Type::Unknown
@@ -588,7 +601,7 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     let unix_timestamp = tls.get_unix_timestamp();
     let ts = timestamp_to_datetime(unix_timestamp);
     println_stderr!("{} signed SHA-256 {} at {:?} (Unix Timestamp: {})",
-                    server, to_hex_string(hash_buf[0..32].iter().cloned().collect()), ts, unix_timestamp);
+                    server, to_hex_string(&hash_buf[0..32].iter().cloned().collect()), ts, unix_timestamp);
 
     //println!("Blob: {}", to_hex_string(tls.signed_blob.clone()));
     //println!("Signature: {}", to_hex_string(tls.signature.clone()));
@@ -624,11 +637,8 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
 
     let mut derparser = DerParser::new(&tls.certs[0].buf);
 
-    //for u in 0..100 {
-    let entry = derparser.parse_entry();
-    //}
-
-    println!("{:?}", entry);
+    let asn1tree = derparser.parse_entry();
+    parse_x509(asn1tree.expect("..."));
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
