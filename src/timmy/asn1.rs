@@ -29,6 +29,13 @@ pub fn asn1_to_raw_string(obj: &ASN1Type) -> Option<String> {
     }
 }
 
+pub fn asn1_to_raw_integer(obj: &ASN1Type) -> Option<BigInt> {
+    match obj {
+        &ASN1Type::Integer(ref bigint) => Some(bigint.clone()),
+        _ => None,
+    }
+}
+
 
 pub struct DerParser {
     buf: Vec<u8>,

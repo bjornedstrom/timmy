@@ -23,7 +23,6 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-use std::fmt::Write as FmtWrite;
 use std::io;
 use std::net::TcpStream;
 use std::path::Path;
@@ -31,6 +30,7 @@ use num::bigint::{BigInt, Sign};
 
 use timmy::tup::*;
 use timmy::asn1::*;
+use timmy::x509::*;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => (
@@ -82,17 +82,6 @@ pub fn to_hex_string(bytes: &Vec<u8>) -> String {
     strs.connect("")
 }
 
-struct X509Certificate {
-    buf: Vec<u8>,
-}
-
-impl X509Certificate {
-    fn new(der: Vec<u8>) -> X509Certificate {
-        X509Certificate {
-            buf: der,
-        }
-    }
-}
 
 struct TLSHandshake {
     client_random: Vec<u8>,
@@ -370,81 +359,6 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
     ch.buf[8] = (size - 9) as u8;
 }
 
-
-fn x509_oid_to_str(oid: &ASN1Type) -> String {
-
-    //let foo = vec![2, 5, 4, 6];
-
-    let ret = match oid {
-        &ASN1Type::Object(Tup::T4(2, 5, 4, 6)) => "C",
-        &ASN1Type::Object(Tup::T4(2, 5, 4, 8)) => "ST",
-        &ASN1Type::Object(Tup::T4(2, 5, 4, 7)) => "L",
-        &ASN1Type::Object(Tup::T4(2, 5, 4, 10)) => "O",
-        &ASN1Type::Object(Tup::T4(2, 5, 4, 3)) => "CN",
-        _ => "unknown"
-    };
-
-    ret.to_string()
-}
-
-fn x509_subject_to_string(subject: &ASN1Type) -> String {
-    let mut result_string = "".to_string();
-
-    match subject {
-        &ASN1Type::Sequence(ref parts) => {
-            for ent in &*parts {
-                if let &ASN1Type::Set(ref seq) = ent {
-                    //println!("{:?}", seq[0]);
-
-                    let ref seq0 = seq[0];
-                    if let ASN1Type::Sequence(ref obj_str) = *seq0 {
-
-                        let oid_str = x509_oid_to_str(&obj_str[0]);
-                        if let Some(value) = asn1_to_raw_string(&obj_str[1]) {
-                            write!(&mut result_string, "{}={}/", oid_str, value).unwrap();
-                        }
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-
-    result_string
-}
-
-fn parse_x509(tree: ASN1Type) {
-    println!("{:?}", tree);
-
-    // Slice patterns are experimental right now, so lets do this
-    // awkwardly.
-    match tree {
-        ASN1Type::Sequence(body) => {
-            match body[0] {
-                ASN1Type::Sequence(ref part0) => {
-                    //for ent in &*part0 {
-                    //    println!("seq {:?}", ent);
-                    //}
-
-                    let ref tbs = *part0;
-
-                    let ref version = tbs[0];
-                    let ref serialNumber = tbs[1];
-                    let ref signature = tbs[2];
-                    let ref issuer = tbs[3];
-                    let ref validity = tbs[4];
-                    let ref subject = tbs[5];
-                    let ref subjectPublicKeyInfo = tbs[6];
-
-                    //println!("{:?}", *subject);
-                    println!("{}", x509_subject_to_string(subject));
-                }
-                _ => {}
-            }
-        }
-        _ => {}
-    }
-}
 
 fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     let conn_str = format!("{}:{}", server, port);
