@@ -1,11 +1,7 @@
 //! X509 certificate parsing
 
 use chrono::*;
-use num::bigint::{BigInt, Sign};
-//use chrono::datetime::DateTime;
-//use chrono::naive::datetime::NaiveDateTime;
-//use chrono::offset::utc::UTC;
-
+use num::bigint::{BigUint, Sign};
 use timmy::asn1::*;
 use timmy::tup::*;
 
@@ -134,7 +130,7 @@ fn x509_parse_algorithm_identifier(ai: &ASN1Type) -> X509Result<AlgorithmIdentif
 
 #[derive(Debug)]
 pub enum PublicKey {
-    RSA(BigInt, BigInt) // n, e
+    RSA(BigUint, BigUint) // n, e
 }
 
 #[derive(Debug)]
@@ -162,7 +158,8 @@ pub fn x509_parse_public_key_info(info: &ASN1Type) -> X509Result<PublicKey> {
                         let rsa_n = asn1_to_raw_integer(&pk_seq[0]).expect("TODO");
                         let rsa_e = asn1_to_raw_integer(&pk_seq[1]).expect("TODO");
 
-                        Ok(PublicKey::RSA(rsa_n, rsa_e))
+                        Ok(PublicKey::RSA(rsa_n.to_biguint().expect("TODO"),
+                                          rsa_e.to_biguint().expect("TODO")))
                     },
                     _ => Err(X509Error::InvalidPublicKey(
                         "Only RSA is supported".to_string()))
