@@ -9,7 +9,7 @@ This program is a proof of concept. Use this program at your own risk. See the A
 
 ## Usage
 
-    $ timmy -f document -s letsencrypt.org > output.json
+    $ timmy -f document > output.json
 	www.google.com signed SHA-256 bf921b493168a... at
 	  2015-08-22T20:04:24Z (Unix Timestamp: 1440273864)
 	
