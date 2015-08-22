@@ -17,22 +17,18 @@ use crypto::md5::Md5;
 use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 use getopts::Options;
-use num::bigint::{BigInt, BigUint, Sign};
+use num::bigint::BigUint;
 use rustc_serialize::base64::{STANDARD, ToBase64, FromBase64};
 use rustc_serialize::json::{self, Json, ToJson};
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use std::io;
 use std::net::TcpStream;
-use std::path::Path;
 
-use timmy::asn1::*;
 use timmy::rsa::*;
-use timmy::tup::*;
 use timmy::x509::*;
 
 macro_rules! println_stderr(
@@ -90,9 +86,9 @@ impl TLSHandshake {
         }
     }
 
-    fn get_signature(&self) -> &Vec<u8> {
+    /*fn get_signature(&self) -> &Vec<u8> {
         &self.signature
-    }
+    }*/
 
     fn get_unix_timestamp(&self) -> u32 {
         let raw = &self.server_random;
@@ -126,15 +122,15 @@ impl TLSHandshake {
         let msg_length = self.parse_header(parser, TLSHandshakeType::ServerHello);
 
         // ServerHello
-        let version = parser.read_u16();
+        let _ /*version*/ = parser.read_u16();
         let server_random: Vec<u8> = parser.take(32).iter().cloned().collect();
         self.server_random.extend(server_random);
 
         let session_size = parser.read_u8() as usize;
-        let session: Vec<u8> = parser.take(session_size).iter().cloned().collect();
+        let _ /*session*/: Vec<u8> = parser.take(session_size).iter().cloned().collect();
 
         self.cipher = parser.read_u16();
-        let compression = parser.read_u8();
+        let _ /*compression*/ = parser.read_u8();
 
         assert!(msg_length == 2 + 32 + 1 + session_size + 2 + 1);
     }
@@ -173,10 +169,10 @@ impl TLSHandshake {
         let pos = parser.tell();
 
         if ecc_params {
-            let point_type = parser.read_u8();
-            let named_curve = parser.read_u16();
+            let _ /*point_type*/ = parser.read_u8();
+            let _ /*named_curve*/ = parser.read_u16();
             let length = parser.read_u8();
-            let point: Vec<u8> = parser.take(length as usize).iter().cloned().collect();
+            let _ /*point*/: Vec<u8> = parser.take(length as usize).iter().cloned().collect();
         }
 
         let enc_buf_len = parser.tell() - pos;
@@ -278,6 +274,7 @@ impl<'a> BinaryParser<'a> {
         &self.buf[cur .. self.idx]
     }
 
+    /*
     fn read_u32(&mut self) -> u32 {
         let raw: &[u8] = self.take(4);
 
@@ -286,6 +283,7 @@ impl<'a> BinaryParser<'a> {
         ((raw[2] as u32) << 8) |
         (raw[3] as u32)
     }
+    */
 
     fn read_u24(&mut self) -> u32 {
         let raw: &[u8] = self.take(3);
@@ -407,7 +405,7 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
                 let unix_timestamp = tls.get_unix_timestamp();
                 let ts = timestamp_to_datetime(unix_timestamp);
 
-                let valid_dates = (ts >= parsed.validity.0 && ts <= parsed.validity.1);
+                let valid_dates = ts >= parsed.validity.0 && ts <= parsed.validity.1;
 
                 if valid_dates {
                     println!("Signature verification SUCCESS.");
@@ -430,7 +428,7 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
 }
 
 
-fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
+fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
     let conn_str = format!("{}:{}", server, port);
 
     //println!("conn_str {}", conn_str);
@@ -442,12 +440,10 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     create_special_client_hello(&mut ch, &hash_buf);
 
     match tcpconn.write(&ch.buf) {
-        Ok(size) => {
-            //println!("wrote {} bytes", size);
-        }
         Err(_) => {
             panic!("write failure!!!");
         }
+        Ok(_) => {}
     }
 
     let mut pars = BinaryParser::new(&mut tcpconn);
@@ -545,7 +541,7 @@ fn main() {
     opts.optopt("f", "file", "input file to sign [-]", "PATH");
     opts.optopt("s", "server", "set server for signing [www.google.com]", "HOSTNAME");
     opts.optopt("p", "port", "set port for --server [443]", "PORT");
-    opts.optopt("o", "output", "ouput file [data]", "PATH");
+    //opts.optopt("o", "output", "ouput file [data]", "PATH");
 
     opts.optflag("h", "help", "print this help menu");
 
@@ -560,11 +556,11 @@ fn main() {
     }
 
     // parse "output"
-    let output = if matches.opt_present("o") {
+    /*let output = if matches.opt_present("o") {
         matches.opt_str("o").unwrap()
     } else {
         "data".to_string()
-    };
+    };*/
 
     // parse "server"
     let server = if matches.opt_present("s") {
@@ -615,13 +611,13 @@ fn main() {
         hasher.result(&mut hash_buf);
 
 
-        perform(&server, &port, &hash_buf, &output);
+        perform(&server, &port, &hash_buf);
     } else {
         // verify
 
         let path = matches.opt_str("v").unwrap();
         let mut contents: Vec<u8> = Vec::new();
-        let mut file_handle = File::open(path) ;
+        let file_handle = File::open(path) ;
         file_handle.unwrap().read_to_end(&mut contents).unwrap();
 
         let filestr = String::from_utf8(contents).unwrap();

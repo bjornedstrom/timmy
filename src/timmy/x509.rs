@@ -1,7 +1,7 @@
 //! X509 certificate parsing
 
 use chrono::*;
-use num::bigint::{BigUint, Sign};
+use num::bigint::BigUint;
 use std::fmt::Write as FmtWrite;
 
 use timmy::asn1::*;
@@ -120,12 +120,6 @@ pub enum PublicKey {
     RSA(BigUint, BigUint) // n, e
 }
 
-#[derive(Debug)]
-pub struct PublicKeyInfo {
-    pub ai: AlgorithmIdentifier,
-    pub key: PublicKey,
-}
-
 pub fn x509_parse_public_key_info(info: &ASN1Type) -> X509Result<PublicKey> {
     if let &ASN1Type::Sequence(ref algo_pubkey) = info {
         let ref algo_seq = algo_pubkey[0];
@@ -201,18 +195,18 @@ impl X509Certificate {
 
                         let ref tbs = *part0;
 
-                        let ref version = tbs[0];
-                        let ref serialNumber = tbs[1];
-                        let ref signature = tbs[2];
-                        let ref issuer = tbs[3];
+                        //let ref version = tbs[0];
+                        //let ref serialNumber = tbs[1];
+                        //let ref signature = tbs[2];
+                        //let ref issuer = tbs[3];
                         let ref validity = tbs[4];
                         let ref subject = tbs[5];
-                        let ref subjectPublicKeyInfo = tbs[6];
+                        let ref subject_public_key_info = tbs[6];
 
 
                         let field_subject = try!(x509_subject_to_string(subject));
                         let field_validity = try!(x509_validity_to_datetime(validity));
-                        let field_public_key = try!(x509_parse_public_key_info(subjectPublicKeyInfo));
+                        let field_public_key = try!(x509_parse_public_key_info(subject_public_key_info));
 
                         let fields = ParsedX509Certificate {
                             key: field_public_key,

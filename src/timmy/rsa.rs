@@ -1,25 +1,24 @@
 //! Naive RSA implementation. Do not use.
 
 use num::{Zero, One};
-use num::bigint::{BigUint};
-use std::mem::replace;
+use num::bigint::BigUint;
 
 // Adapted from https://github.com/jsanders/rust-rsa
 fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
     let (zero, one): (BigUint, BigUint) = (Zero::zero(), One::one());
 
     let mut result = one.clone();
-    let mut baseAcc = base.clone();
-    let mut exponentAcc = exponent.clone();
+    let mut base_acc = base.clone();
+    let mut exponent_acc = exponent.clone();
 
-    while exponentAcc > zero {
-        if (&exponentAcc & &one) == one {
-            result = result * &baseAcc;
+    while exponent_acc > zero {
+        if (&exponent_acc & &one) == one {
+            result = result * &base_acc;
             result = result % modulus;
         }
-        baseAcc = &baseAcc * &baseAcc;
-        baseAcc = &baseAcc % modulus;
-        exponentAcc = exponentAcc >> 1;
+        base_acc = &base_acc * &base_acc;
+        base_acc = &base_acc % modulus;
+        exponent_acc = exponent_acc >> 1;
     }
 
     result
@@ -60,7 +59,7 @@ pub fn make_pkcs1_sig_padding(n: &BigUint, hash_material: &Vec<u8>) -> Vec<u8> {
     pkcs1.push(0x01);
 
     // ignore leading zero
-    for i in 0 .. (byte_size - 2 - hash_material.len() - 1) {
+    for _ in 0 .. (byte_size - 2 - hash_material.len() - 1) {
         pkcs1.push(0xff);
     }
     pkcs1.push(0x00);

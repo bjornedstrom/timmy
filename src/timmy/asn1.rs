@@ -153,7 +153,7 @@ impl DerParser {
             2 => ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw)),
             6 => {
                 let mut oi = Vec::<u32>::new();
-                let mut obj_bytes = raw;
+                let obj_bytes = raw;
                 oi.push((obj_bytes[0] / 40) as u32);
                 oi.push((obj_bytes[0] % 40) as u32);
                 let mut i = 1;
