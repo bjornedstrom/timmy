@@ -3,7 +3,7 @@
 
 "Trusted timestamping" is using a trusted party to sign a timestamp together with a piece of data (normally a hash of a document). This can for example be used to prove that a document was authored at, or before, a certain date.
 
-`timmy` is a command line tool that uses a pecularity in the TLS protocol to let almost any TLS server act as a timestamping server. That is, you can let the TLS server, such as www.google.com, sign your hash with a timestamp provided by the server.
+`timmy` is a command line tool that uses a pecularity in the TLS protocol to let almost any TLS server act as a trusted timestamping server. That is, you can let the TLS server, such as www.google.com, sign your hash with a *timestamp provided by the server*.
 
 This program is a proof of concept. Use this program at your own risk. See the About section for more details.
 
@@ -19,7 +19,7 @@ This program is a proof of concept. Use this program at your own risk. See the A
     $ timmy -v output.json
     Signature verification SUCCESS.
     Warning! Signature only verified against first X509 certificate.
-    Please verify yourself that certificate chain is valid.
+    Please verify yourself that the certificate chain is valid.
     
     C=US/ST=California/L=Mountain View/O=Google Inc/CN=google.com/ Signed
 	  SHA-256 bf921b493168a050884f723dc13fa4b1fc0afe95d06ce8cd4d66b4087204cbd0

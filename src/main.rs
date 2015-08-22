@@ -412,7 +412,7 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
                 if valid_dates {
                     println!("Signature verification SUCCESS.");
                     println!("Warning! Signature only verified against first X509 certificate.");
-                    println!("Please verify yourself that certificate chain is valid.");
+                    println!("Please verify yourself that the certificate chain is valid.");
                     println!("");
                     println!("{} Signed SHA-256 {} at {:?} (Unix Timestamp: {})",
                              parsed.subject,
