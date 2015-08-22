@@ -9,11 +9,21 @@ This program is a proof of concept. Use this program at your own risk. See the A
 
 ## Usage
 
-    $ timmy -f document
+    $ timmy -f document -s letsencrypt.org > output.json
 	www.google.com signed SHA-256 bf921b493168a... at
-	  2015-08-10T22:27:07Z (Unix Timestamp: 1439245627)
+	  2015-08-22T20:04:24Z (Unix Timestamp: 1440273864)
+	
 	$ sha256sum document
 	bf921b493168a...  document
+    
+    $ timmy -v output.json
+    Signature verification SUCCESS.
+    Warning! Signature only verified against first X509 certificate.
+    Please verify yourself that certificate chain is valid.
+    
+    C=US/ST=California/L=Mountain View/O=Google Inc/CN=google.com/ Signed
+	  SHA-256 bf921b493168a050884f723dc13fa4b1fc0afe95d06ce8cd4d66b4087204cbd0
+	  at 2015-08-22T20:04:24Z (Unix Timestamp: 1440273864)
 
 ### Gotchas
 
