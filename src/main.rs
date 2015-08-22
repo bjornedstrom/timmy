@@ -4,8 +4,8 @@
 extern crate chrono;
 extern crate crypto;
 extern crate getopts;
-extern crate rustc_serialize;
 extern crate num;
+extern crate rustc_serialize;
 
 mod timmy;
 
@@ -13,10 +13,11 @@ use chrono::datetime::DateTime;
 use chrono::naive::datetime::NaiveDateTime;
 use chrono::offset::utc::UTC;
 use crypto::digest::Digest;
-use crypto::sha2::Sha256;
-use crypto::sha1::Sha1;
 use crypto::md5::Md5;
+use crypto::sha1::Sha1;
+use crypto::sha2::Sha256;
 use getopts::Options;
+use num::bigint::{BigInt, BigUint, Sign};
 use rustc_serialize::base64::{STANDARD, ToBase64};
 use rustc_serialize::json::{self, Json, ToJson};
 use std::collections::BTreeMap;
@@ -28,12 +29,11 @@ use std::io::Write;
 use std::io;
 use std::net::TcpStream;
 use std::path::Path;
-use num::bigint::{BigInt, BigUint, Sign};
 
-use timmy::tup::*;
 use timmy::asn1::*;
-use timmy::x509::*;
 use timmy::rsa::*;
+use timmy::tup::*;
+use timmy::x509::*;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => (
