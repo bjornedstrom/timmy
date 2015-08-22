@@ -18,7 +18,7 @@ use crypto::sha1::Sha1;
 use crypto::sha2::Sha256;
 use getopts::Options;
 use num::bigint::{BigInt, BigUint, Sign};
-use rustc_serialize::base64::{STANDARD, ToBase64};
+use rustc_serialize::base64::{STANDARD, ToBase64, FromBase64};
 use rustc_serialize::json::{self, Json, ToJson};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -54,23 +54,6 @@ enum TLSHandshakeType {
     Certificate = 11,
     ServerKeyExchange = 12,
 }
-
-
-/*
-pub struct ClientHello {
-    header: u32,
-    client_random: &[u8; 32],
-    cipher_suits: Vec<u16>,
-    compression: Vec<u8>,
-    //extensions:
-}
-
-impl ClientHello {
-    pub fn size(&self) -> uint {
-        return 32 + 
-    }
-}
-*/
 
 fn timestamp_to_datetime(unix_timestamp: u32) -> DateTime<UTC> {
     let naive_ts = NaiveDateTime::from_timestamp(unix_timestamp as i64, 0);
@@ -378,6 +361,75 @@ fn weird_tls_hash(blob: &Vec<u8>) -> Vec<u8> {
 }
 
 
+#[derive(RustcDecodable, RustcEncodable, Debug)]
+struct JsonOutput {
+    blob: String,
+    certificates: Vec<String>,
+    signature: String
+}
+
+
+fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
+
+    let cert = X509Certificate::new(cert0.clone());
+
+    let parsed = cert.parse().unwrap(); // XXX unwrap
+
+    //println!("{:?}", parsed);
+
+    match parsed.key {
+        PublicKey::RSA(rsa_n, rsa_e) => {
+
+            let signature_int = BigUint::from_bytes_be(&signature);
+            let sig_op = rsa_encrypt(&signature_int, &rsa_e,  &rsa_n);
+            let raw_pkcs1 = sig_op.to_bytes_be();
+
+            //println!("{}", estimate_bit_size(&rsa_n));
+
+            // the hash here in the PKCS1 structure is MD5(blob) || SHA1(blob)
+            // recall that the first part of blob is the SHA-256 hash
+            //println!("{:?}", to_hex_string(&raw_pkcs1));
+
+            // construct our own signature to compare against
+            let tls_hash = weird_tls_hash(&blob);
+            let constructed_pkcs1 = make_pkcs1_sig_padding(&rsa_n, &tls_hash);
+
+            //println!("{:?}", to_hex_string(&tls_hash));
+            //println!("{:?}", to_hex_string(&constructed_pkcs1));
+
+            let valid_signature = crypto_compare(&constructed_pkcs1, &raw_pkcs1);
+            //println!("{:?}", valid_signature);
+
+            if valid_signature {
+                let mut tls = TLSHandshake::new();
+                tls.client_random = blob[0..32].iter().cloned().collect();
+                tls.server_random = blob[32..64].iter().cloned().collect();
+                let unix_timestamp = tls.get_unix_timestamp();
+                let ts = timestamp_to_datetime(unix_timestamp);
+
+                let valid_dates = (ts >= parsed.validity.0 && ts <= parsed.validity.1);
+
+                if valid_dates {
+                    println!("Signature verification SUCCESS.");
+                    println!("Warning! Signature only verified against first X509 certificate.");
+                    println!("Please verify yourself that certificate chain is valid.");
+                    println!("");
+                    println!("{} Signed SHA-256 {} at {:?} (Unix Timestamp: {})",
+                             parsed.subject,
+                             to_hex_string(&tls.client_random), ts, unix_timestamp);
+                } else {
+                    println!("Signature verification FAILURE: Invalid timestamp.");
+                }
+
+            } else {
+                println!("Signature verification FAILURE.");
+            }
+        }
+    }
+
+}
+
+
 fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     let conn_str = format!("{}:{}", server, port);
 
@@ -462,36 +514,6 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     parse_x509(asn1tree.expect("..."));
      */
 
-    let parsed = tls.certs[0].parse().unwrap(); // XXX unwrap
-
-    println!("{:?}", parsed);
-
-    match parsed.key {
-        PublicKey::RSA(rsa_n, rsa_e) => {
-
-            let signature_int = BigUint::from_bytes_be(&tls.signature);
-            let sig_op = rsa_encrypt(&signature_int, &rsa_e,  &rsa_n);
-            let raw_pkcs1 = sig_op.to_bytes_be();
-
-            //println!("{}", estimate_bit_size(&rsa_n));
-
-            // the hash here in the PKCS1 structure is MD5(blob) || SHA1(blob)
-            // recall that the first part of blob is the SHA-256 hash
-            println!("{:?}", to_hex_string(&raw_pkcs1));
-
-            // construct our own signature to compare against
-            let tls_hash = weird_tls_hash(&tls.signed_blob);
-            let constructed_pkcs1 = make_pkcs1_sig_padding(&rsa_n, &tls_hash);
-
-            //println!("{:?}", to_hex_string(&tls_hash));
-
-            println!("{:?}", to_hex_string(&constructed_pkcs1));
-
-            let valid_signature = crypto_compare(&constructed_pkcs1, &raw_pkcs1);
-            println!("{:?}", valid_signature);
-
-        }
-    }
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
@@ -519,6 +541,7 @@ fn main() {
     let program = args[0].clone();
     let mut opts = Options::new();
 
+    opts.optopt("v", "verify", "verify signature object", "PATH");
     opts.optopt("f", "file", "input file to sign [-]", "PATH");
     opts.optopt("s", "server", "set server for signing [www.google.com]", "HOSTNAME");
     opts.optopt("p", "port", "set port for --server [443]", "PORT");
@@ -564,29 +587,53 @@ fn main() {
         443
     };
 
-    // parse "file" and hash it
-    let mut hasher = Sha256::new();
+    if !matches.opt_present("v") {
+        // sign
 
-    if matches.opt_present("f") {
-        let path = matches.opt_str("f").unwrap();
-        let mut file_handle = match File::open(path) {
-            Ok(f) => f,
-            Err(s) => {
-                println!("Reading file failed: {}", s);
-                //print_usage(&program, opts);
-                return;
-            }
+        // parse "file" and hash it
+        let mut hasher = Sha256::new();
+
+        if matches.opt_present("f") {
+            let path = matches.opt_str("f").unwrap();
+            let mut file_handle = match File::open(path) {
+                Ok(f) => f,
+                Err(s) => {
+                    println!("Reading file failed: {}", s);
+                    //print_usage(&program, opts);
+                    return;
+                }
+            };
+
+            hash_content(&mut file_handle, &mut hasher);
+        } else {
+            hash_content(&mut io::stdin(), &mut hasher);
         };
 
-        hash_content(&mut file_handle, &mut hasher);
+        //println!("Hello, world! {} {} {:?}", server, port, hasher.result_str());
+
+        let mut hash_buf: [u8; 32] = [0; 32];
+        hasher.result(&mut hash_buf);
+
+
+        perform(&server, &port, &hash_buf, &output);
     } else {
-        hash_content(&mut io::stdin(), &mut hasher);
-    };
+        // verify
 
-    //println!("Hello, world! {} {} {:?}", server, port, hasher.result_str());
+        let path = matches.opt_str("v").unwrap();
+        let mut contents: Vec<u8> = Vec::new();
+        let mut file_handle = File::open(path) ;
+        file_handle.unwrap().read_to_end(&mut contents).unwrap();
 
-    let mut hash_buf: [u8; 32] = [0; 32];
-    hasher.result(&mut hash_buf);
+        let filestr = String::from_utf8(contents).unwrap();
 
-    perform(&server, &port, &hash_buf, &output);
+        let json_blob: JsonOutput = json::decode(&filestr).unwrap();
+
+        //println!("{:?}", json_blob);
+
+        let blob = json_blob.blob.from_base64().unwrap();
+        let cert0 = json_blob.certificates[0].from_base64().unwrap();
+        let signature = json_blob.signature.from_base64().unwrap();
+
+        verify(&blob, &cert0, &signature);
+    }
 }

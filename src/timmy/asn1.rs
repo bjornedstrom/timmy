@@ -102,8 +102,6 @@ impl DerParser {
             0 => {
             }
             2 => {
-                // TODO: ignore for now
-                println!("{} {} {} {}", class_bits, constructed, tag, length);
                 let pos = self.idx;
                 self.idx += length;
 
