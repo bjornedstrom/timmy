@@ -25,6 +25,6 @@ fn mod_exp(base: &BigUint, exponent: &BigUint, modulus: &BigUint) -> BigUint {
     result
 }
 
-pub fn rsa_encrypt(m: &BigUint, n: &BigUint, e: &BigUint) -> BigUint {
+pub fn rsa_encrypt(m: &BigUint, e: &BigUint, n: &BigUint) -> BigUint {
     mod_exp(m, e, n)
 }

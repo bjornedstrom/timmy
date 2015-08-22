@@ -2,22 +2,10 @@
 
 use chrono::*;
 use num::bigint::{BigUint, Sign};
-use timmy::asn1::*;
-use timmy::tup::*;
-
 use std::fmt::Write as FmtWrite;
 
-pub struct X509Certificate {
-    pub buf: Vec<u8>,
-}
-
-impl X509Certificate {
-    pub fn new(der: Vec<u8>) -> X509Certificate {
-        X509Certificate {
-            buf: der,
-        }
-    }
-}
+use timmy::asn1::*;
+use timmy::tup::*;
 
 #[derive(Debug)]
 pub enum X509Error {
@@ -28,7 +16,6 @@ pub enum X509Error {
 }
 
 pub type X509Result<T> = Result<T, X509Error>;
-
 
 fn x509_oid_to_str(oid: &ASN1Type) -> String {
     let ret = match oid {
@@ -43,7 +30,7 @@ fn x509_oid_to_str(oid: &ASN1Type) -> String {
     ret.to_string()
 }
 
-pub fn x509_subject_to_string(subject: &ASN1Type) -> String {
+pub fn x509_subject_to_string(subject: &ASN1Type) -> X509Result<String> {
     let mut result_string = "".to_string();
 
     match subject {
@@ -66,7 +53,7 @@ pub fn x509_subject_to_string(subject: &ASN1Type) -> String {
         _ => {}
     }
 
-    result_string
+    Ok(result_string)
 }
 
 pub fn x509_validity_to_datetime(validity: &ASN1Type) -> X509Result<(DateTime<UTC>, DateTime<UTC>)> {
@@ -178,37 +165,80 @@ pub fn x509_parse_public_key_info(info: &ASN1Type) -> X509Result<PublicKey> {
     }
 }
 
-pub fn parse_x509(tree: ASN1Type) {
-    println!("{:?}", tree);
+#[derive(Debug)]
+pub struct ParsedX509Certificate {
+    pub key: PublicKey,
+    pub validity: (DateTime<UTC>, DateTime<UTC>),
+    pub subject: String,
+}
 
-    // Slice patterns are experimental right now, so lets do this
-    // awkwardly.
-    match tree {
-        ASN1Type::Sequence(body) => {
-            match body[0] {
-                ASN1Type::Sequence(ref part0) => {
-                    //for ent in &*part0 {
-                    //    println!("seq {:?}", ent);
-                    //}
+pub struct X509Certificate {
+    pub buf: Vec<u8>,
+}
 
-                    let ref tbs = *part0;
+impl X509Certificate {
+    pub fn new(der: Vec<u8>) -> X509Certificate {
+        X509Certificate {
+            buf: der,
+        }
+    }
 
-                    let ref version = tbs[0];
-                    let ref serialNumber = tbs[1];
-                    let ref signature = tbs[2];
-                    let ref issuer = tbs[3];
-                    let ref validity = tbs[4];
-                    let ref subject = tbs[5];
-                    let ref subjectPublicKeyInfo = tbs[6];
+    pub fn parse(&self) -> X509Result<ParsedX509Certificate> {
+        let mut derparser = DerParser::new(&self.buf);
 
-                    //println!("{:?}", *subject);
-                    println!("{}", x509_subject_to_string(subject));
-                    println!("{:?}", x509_validity_to_datetime(validity));
-                    println!("{:?}", x509_parse_public_key_info(subjectPublicKeyInfo));
+        let asn1tree = derparser.parse_entry();
+        let tree = asn1tree.expect("...");
+
+        // Slice patterns are experimental right now, so lets do this
+        // awkwardly.
+        match tree {
+            ASN1Type::Sequence(body) => {
+                match body[0] {
+                    ASN1Type::Sequence(ref part0) => {
+                        //for ent in &*part0 {
+                        //    println!("seq {:?}", ent);
+                        //}
+
+                        let ref tbs = *part0;
+
+                        let ref version = tbs[0];
+                        let ref serialNumber = tbs[1];
+                        let ref signature = tbs[2];
+                        let ref issuer = tbs[3];
+                        let ref validity = tbs[4];
+                        let ref subject = tbs[5];
+                        let ref subjectPublicKeyInfo = tbs[6];
+
+
+                        let field_subject = try!(x509_subject_to_string(subject));
+                        let field_validity = try!(x509_validity_to_datetime(validity));
+                        let field_public_key = try!(x509_parse_public_key_info(subjectPublicKeyInfo));
+
+                        let fields = ParsedX509Certificate {
+                            key: field_public_key,
+                            validity: field_validity,
+                            subject: field_subject,
+                        };
+
+                        //self.fields = Some(fields);
+
+                        Ok(fields)
+
+                        //println!("{:?}", *subject);
+                        //println!("{}", x509_subject_to_string(subject));
+                        //println!("{:?}", x509_validity_to_datetime(validity));
+                        //println!("{:?}", x509_parse_public_key_info(subjectPublicKeyInfo));
+                    }
+                    _ => {
+                        Err(X509Error::InvalidType(
+                            "certificate should be a sequence".to_string()))
+                    }
                 }
-                _ => {}
+            }
+            _ => {
+                Err(X509Error::InvalidType(
+                    "certificate should be a sequence".to_string()))
             }
         }
-        _ => {}
     }
 }

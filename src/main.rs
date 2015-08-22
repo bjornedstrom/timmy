@@ -26,11 +26,12 @@ use std::io::Write;
 use std::io;
 use std::net::TcpStream;
 use std::path::Path;
-use num::bigint::{BigInt, Sign};
+use num::bigint::{BigInt, BigUint, Sign};
 
 use timmy::tup::*;
 use timmy::asn1::*;
 use timmy::x509::*;
+use timmy::rsa::*;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => (
@@ -437,10 +438,28 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     }
     */
 
+    /*
     let mut derparser = DerParser::new(&tls.certs[0].buf);
 
     let asn1tree = derparser.parse_entry();
     parse_x509(asn1tree.expect("..."));
+     */
+
+    let parsed = tls.certs[0].parse().unwrap(); // XXX unwrap
+
+    println!("{:?}", parsed);
+
+    let sig_int = BigUint::from_bytes_be(&tls.signature);
+
+    match parsed.key {
+        PublicKey::RSA(rsa_n, rsa_e) => {
+            let s = rsa_encrypt(&sig_int, &rsa_e,  &rsa_n);
+
+            // the hash here in the PKCS1 structure is MD5(blob) || SHA1(blob)
+            // recall that the first part of blob is the SHA-256 hash
+            println!("{:?}", to_hex_string(&s.to_bytes_be()));
+        }
+    }
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
