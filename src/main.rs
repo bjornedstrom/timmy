@@ -14,6 +14,8 @@ use chrono::naive::datetime::NaiveDateTime;
 use chrono::offset::utc::UTC;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
+use crypto::sha1::Sha1;
+use crypto::md5::Md5;
 use getopts::Options;
 use rustc_serialize::base64::{STANDARD, ToBase64};
 use rustc_serialize::json::{self, Json, ToJson};
@@ -361,6 +363,21 @@ fn create_special_client_hello(ch: &mut SimpleBinaryWriter, hash_buf: &[u8; 32])
 }
 
 
+fn weird_tls_hash(blob: &Vec<u8>) -> Vec<u8> {
+    let mut hash_sha1 = Sha1::new();
+    let mut hash_md5 = Md5::new();
+
+    hash_sha1.input(&blob);
+    hash_md5.input(&blob);
+
+    let mut hash_result: [u8; 36] = [0; 36];
+    hash_md5.result(&mut hash_result[0..16]);
+    hash_sha1.result(&mut hash_result[16..36]);
+
+    hash_result.iter().cloned().collect()
+}
+
+
 fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
     let conn_str = format!("{}:{}", server, port);
 
@@ -449,15 +466,30 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32], output: &String) {
 
     println!("{:?}", parsed);
 
-    let sig_int = BigUint::from_bytes_be(&tls.signature);
-
     match parsed.key {
         PublicKey::RSA(rsa_n, rsa_e) => {
-            let s = rsa_encrypt(&sig_int, &rsa_e,  &rsa_n);
+
+            let signature_int = BigUint::from_bytes_be(&tls.signature);
+            let sig_op = rsa_encrypt(&signature_int, &rsa_e,  &rsa_n);
+            let raw_pkcs1 = sig_op.to_bytes_be();
+
+            //println!("{}", estimate_bit_size(&rsa_n));
 
             // the hash here in the PKCS1 structure is MD5(blob) || SHA1(blob)
             // recall that the first part of blob is the SHA-256 hash
-            println!("{:?}", to_hex_string(&s.to_bytes_be()));
+            println!("{:?}", to_hex_string(&raw_pkcs1));
+
+            // construct our own signature to compare against
+            let tls_hash = weird_tls_hash(&tls.signed_blob);
+            let constructed_pkcs1 = make_pkcs1_sig_padding(&rsa_n, &tls_hash);
+
+            //println!("{:?}", to_hex_string(&tls_hash));
+
+            println!("{:?}", to_hex_string(&constructed_pkcs1));
+
+            let valid_signature = crypto_compare(&constructed_pkcs1, &raw_pkcs1);
+            println!("{:?}", valid_signature);
+
         }
     }
 }
