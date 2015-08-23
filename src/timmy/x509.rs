@@ -13,6 +13,7 @@ pub enum X509Error {
     InvalidSequence(String),
     InvalidTimestamp(String),
     InvalidPublicKey(String),
+    InvalidASN1(ASN1Error),
 }
 
 pub type X509Result<T> = Result<T, X509Error>;
@@ -50,7 +51,9 @@ pub fn x509_subject_to_string(subject: &ASN1Type) -> X509Result<String> {
                 }
             }
         }
-        _ => {}
+        _ => {
+            return Err(X509Error::InvalidType("failed to construct subject".to_string()));
+        }
     }
 
     Ok(result_string)
@@ -181,7 +184,10 @@ impl X509Certificate {
         let mut derparser = DerParser::new(&self.buf);
 
         let asn1tree = derparser.parse_entry();
-        let tree = asn1tree.unwrap(); // XXX
+        if asn1tree.is_err() {
+            return Err(X509Error::InvalidASN1(asn1tree.unwrap_err()));
+        }
+        let tree = asn1tree.unwrap();
 
         // Slice patterns are experimental right now, so lets do this
         // awkwardly.
@@ -203,7 +209,6 @@ impl X509Certificate {
                         let ref subject = tbs[5];
                         let ref subject_public_key_info = tbs[6];
 
-
                         let field_subject = try!(x509_subject_to_string(subject));
                         let field_validity = try!(x509_validity_to_datetime(validity));
                         let field_public_key = try!(x509_parse_public_key_info(subject_public_key_info));
@@ -214,14 +219,7 @@ impl X509Certificate {
                             subject: field_subject,
                         };
 
-                        //self.fields = Some(fields);
-
                         Ok(fields)
-
-                        //println!("{:?}", *subject);
-                        //println!("{}", x509_subject_to_string(subject));
-                        //println!("{:?}", x509_validity_to_datetime(validity));
-                        //println!("{:?}", x509_parse_public_key_info(subjectPublicKeyInfo));
                     }
                     _ => {
                         Err(X509Error::InvalidType(

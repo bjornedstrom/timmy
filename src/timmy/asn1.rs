@@ -187,7 +187,9 @@ impl DerParser {
                 }
                 Ok(ASN1Type::Set(sequence))
             },
-            tag if tag == TypeId::Integer as u8 => Ok(ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw))),
+            tag if tag == TypeId::Integer as u8 => {
+                Ok(ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw)))
+            },
             tag if tag == TypeId::Object as u8 => {
                 let mut oi = Vec::<u32>::new();
                 let obj_bytes = raw;
