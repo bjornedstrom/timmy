@@ -7,7 +7,7 @@
 
 `timmy` is a command line tool that uses a pecularity in the TLS protocol to let almost any TLS server act as a trusted timestamping server. That is, you can let the TLS server, such as www.google.com, sign your hash with a *timestamp provided by the server*.
 
-This program is a proof of concept. Use this program at your own risk. See the About section for more details.
+This program is a **proof of concept**. Use this program at your own risk. See the About section for more details.
 
 ## Usage
 
@@ -79,6 +79,6 @@ The "signature" returned by the TLS server is a PKCS 1.5 padded hash of the "blo
 
 ## About
 
-The author (Björn) discovered this curiosity of the TLS protocol back in 2012, and wrote a blog post about it here: [blog.bjrn.se](http://blog.bjrn.se/2012/07/fun-with-tls-handshake.html). Now three years later he wanted to learn the Rust programming language and resumed the project.
+The author (Björn) discovered this curiosity of the TLS protocol back in 2012, and wrote a blog post about it here: [blog.bjrn.se](http://blog.bjrn.se/2012/07/fun-with-tls-handshake.html). Now three years later he wanted to learn the Rust programming language and resumed the project. The author is not endorsing using this program for real trusted timestamping needs: use at your own risk.
 
 See LICENSE for licensing information. Copyright (C) Björn Edström <be@bjrn.se> 2012, 2015.
