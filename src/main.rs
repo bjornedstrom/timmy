@@ -100,9 +100,10 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> i32 {
                     println!("Warning! Signature only verified against first X509 certificate.");
                     println!("Please verify yourself that the certificate chain is valid.");
                     println!("");
-                    println!("{} Signed SHA-256 {} at {:?} (Unix Timestamp: {})",
-                             parsed_cert.subject,
-                             to_hex_string(&tls.client_random), ts, unix_timestamp);
+                    println!("Certificate Subject: {}", parsed_cert.subject);
+                    println!("Certificate SHA-1 Fingerprint: {}", to_hex_string(&cert.sha1_fingerprint().unwrap()));
+                    println!("Signed Time: {} (timestamp {})", ts, unix_timestamp);
+                    println!("Signed User-supplied SHA-256 Hash: {}", to_hex_string(&tls.client_random));
                 } else {
                     println!("ERROR! Signature verification FAILURE: Invalid timestamp.");
                     return 1;

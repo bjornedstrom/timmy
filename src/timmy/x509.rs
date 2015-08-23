@@ -1,6 +1,8 @@
 //! X509 certificate parsing
 
 use chrono::*;
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
 use num::bigint::BigUint;
 use std::fmt::Write as FmtWrite;
 
@@ -178,6 +180,14 @@ impl X509Certificate {
         X509Certificate {
             buf: der,
         }
+    }
+
+    pub fn sha1_fingerprint(&self) -> X509Result<Vec<u8>> {
+        let mut hash_sha1 = Sha1::new();
+        hash_sha1.input(&self.buf);
+        let mut hash_result: [u8; 20] = [0; 20];
+        hash_sha1.result(&mut hash_result[0..20]);
+        Ok(hash_result.iter().cloned().collect())
     }
 
     pub fn parse(&self) -> X509Result<ParsedX509Certificate> {

@@ -5,7 +5,7 @@
 
 "Trusted timestamping" is using a trusted party to sign a timestamp together with a piece of data (normally a hash of a document). This can for example be used to prove that a document was authored at, or before, a certain date.
 
-`timmy` is a command line tool that uses a pecularity in the TLS protocol to let almost any TLS server act as a trusted timestamping server. That is, you can let the TLS server, such as www.google.com, sign your hash with a *timestamp provided by the server*.
+`timmy` is a command line tool that uses a peculiarity in the TLS protocol to let almost any TLS server act as a trusted timestamping server. That is, you can let the TLS server, such as www.google.com, sign your hash with a *timestamp provided by the server*.
 
 This program is a **proof of concept**. Use this program at your own risk. See the About section for more details.
 
@@ -27,9 +27,10 @@ To verify a document you do:
     Warning! Signature only verified against first X509 certificate.
     Please verify yourself that the certificate chain is valid.
     
-    C=US/ST=California/L=Mountain View/O=Google Inc/CN=google.com/ Signed
-	  SHA-256 bf921b493168a050884f723dc13fa4b1fc0afe95d06ce8cd4d66b4087204cbd0
-	  at 2015-08-22T20:04:24Z (Unix Timestamp: 1440273864)
+    Certificate Subject: C=US/ST=California/L=Mountain View/O=Google Inc/CN=google.com/
+    Certificate SHA-1 Fingerprint: 07f8e9d3fdf0135583a07015a208731d213f7de0
+    Signed Time: 2015-08-22 20:04:24 UTC (timestamp 1440273864)
+    Signed User-supplied SHA-256 Hash: bf921b493168a050884f723dc13fa4b1fc0afe95d06ce8cd4d66b4087204cbd0
 
 ### Gotchas
 
