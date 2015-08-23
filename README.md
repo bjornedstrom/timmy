@@ -75,7 +75,9 @@ The output when you sign is a JSON blob that contains three Base64 coded fields:
 
 This program is written in Rust. It has been tested with the 1.2.0 release.
 
-    $ cargo build
+    $ cargo build [ --release ]
+
+There is also a debian package you can build using normal means.
 
 ## Appendix A: Signature Details
 
