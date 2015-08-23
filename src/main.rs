@@ -194,26 +194,22 @@ fn main() {
     opts.optopt("f", "file", "input file to sign [-]", "PATH");
     opts.optopt("s", "server", "set server for signing [www.google.com]", "HOSTNAME");
     opts.optopt("p", "port", "set port for --server [443]", "PORT");
-    //opts.optopt("o", "output", "ouput file [data]", "PATH");
 
     opts.optflag("h", "help", "print this help menu");
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
-    };
+    let parse_result = opts.parse(&args[1..]);
+
+    if let Err(f) = parse_result {
+        println_stderr!("ERROR: {}", f.to_string());
+        return;
+    }
+
+    let matches = parse_result.unwrap();
 
     if matches.opt_present("h") {
         print_usage(&program, opts);
         return;
     }
-
-    // parse "output"
-    /*let output = if matches.opt_present("o") {
-        matches.opt_str("o").unwrap()
-    } else {
-        "data".to_string()
-    };*/
 
     // parse "server"
     let server = if matches.opt_present("s") {
@@ -258,8 +254,6 @@ fn main() {
             hash_content(&mut io::stdin(), &mut hasher);
         };
 
-        //println!("Hello, world! {} {} {:?}", server, port, hasher.result_str());
-
         let mut hash_buf: [u8; 32] = [0; 32];
         hasher.result(&mut hash_buf);
 
@@ -275,8 +269,6 @@ fn main() {
         let filestr = String::from_utf8(contents).unwrap();
 
         let json_blob: JsonOutput = json::decode(&filestr).unwrap();
-
-        //println!("{:?}", json_blob);
 
         let blob = json_blob.blob.from_base64().unwrap();
         let cert0 = json_blob.certificates[0].from_base64().unwrap();
