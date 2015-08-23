@@ -373,6 +373,15 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
 
     let parsed = cert.parse().unwrap(); // XXX unwrap
 
+    let utc_now: DateTime<UTC> = UTC::now();
+
+    let cert_still_valid = utc_now >= parsed.validity.0 && utc_now <= parsed.validity.1;
+
+    if !cert_still_valid {
+        println_stderr!("ERROR! Signature verification FAILURE: Certificate has expired.");
+        return;
+    }
+
     //println!("{:?}", parsed);
 
     match parsed.key {
@@ -420,11 +429,11 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
                              parsed.subject,
                              to_hex_string(&tls.client_random), ts, unix_timestamp);
                 } else {
-                    println!("Signature verification FAILURE: Invalid timestamp.");
+                    println!("ERROR! Signature verification FAILURE: Invalid timestamp.");
                 }
 
             } else {
-                println!("Signature verification FAILURE.");
+                println!("ERROR! Signature verification FAILURE.");
             }
         }
     }

@@ -35,10 +35,15 @@ By default the program will use www.google.com:443 for signing, which as of writ
 * www.symantec.com:443
 * www.godaddy.com:443
 
-timmy will detect these invalid servers and refuse:
+timmy will detect these invalid servers and refuse to sign (TODO: implement similar for verification):
 
     $ timmy -f document -s facebook.com
 	ERROR! Server responded with invalid time! Aborting.
+
+A further gotcha is that many of the *valid* servers are configured with short lived certificates nowadays. For example Googles certificates are routinely only valid for a few months at most. On signature verification timmy will check that the timestamp signed falls within the valid dates. You may see this after a while:
+
+    $ timmy -v output.json
+    ERROR! Signature verification FAILURE: Certificate has expired.
 
 ### Attacks
 
