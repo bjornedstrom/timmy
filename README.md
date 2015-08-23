@@ -39,6 +39,26 @@ By default the program will use www.google.com:443 for signing, which as of writ
 
 As mentioned above, not all TLS servers supply valid timestamps. This is true for many big websites, such as facebook.com or amazon.com. An attacker can abuse this by repeatedly sending requests to any of these servers until a desired (within some range) timestamp is returned. You should only accept signatures from servers you know are trustworthy in this regard.
 
+### Input, Output, Signature and Certificates
+
+When you sign a document with timmy, you sign a SHA-256 hash. For convenience timmy will calculate this hash for you for your input file. Lets call this hash `H`. `H` is sent to the server in a special way and you will get some data back.
+
+The output when you sign is a JSON blob that contains three Base64 coded fields:
+
+* `"certificates"` is a list of certificates: the certificate chain returned by the TLS server. The first certificate in the list is the one that signs your data.
+* `"blob"` is the data signed. The first 32 bytes is the hash `H` and the following 4 bytes is the timestamp. The rest of the data in the blob are internal to the TLS handshake and can be ignored for our purpose.
+* `"signature"` is the server's signature of the blob. It is signed by the private key corresponding to the public key in `certificates[0]`.
+
+## Building
+
+    $ cargo build
+
+## Appendix A: Signature Details
+
+To avoid confusion I'd only recommend you to read this section if you are comfortable with cryptography and the TLS protocol. Otherwise this may be confusing.
+
+The "signature" returned by the TLS server is a PKCS 1.5 padded hash of the "blob". The hash in this case is the unusual TLS 1 construction TLSHash(h) = MD5(h) || SHA1(h).
+
 ## About
 
 The author (Björn) discovered this curiosity of the TLS protocol back in 2012, and wrote a blog post about it here: [blog.bjrn.se](http://blog.bjrn.se/2012/07/fun-with-tls-handshake.html). Now three years later he wanted to learn the Rust programming language and resumed the project.
