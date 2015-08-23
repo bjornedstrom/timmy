@@ -53,6 +53,10 @@ Yet another gotcha is of course that a certificate may have been revoked. timmy 
 
 As mentioned above, not all TLS servers supply valid timestamps. This is true for many big websites, such as facebook.com or amazon.com. An attacker can abuse this by repeatedly sending requests to any of these servers until a desired (within some range) timestamp is returned. You should only accept signatures from servers you know are trustworthy in this regard.
 
+As a further complication, it could happen that a server used to reply with random timestamps, but sometimes in the future changes this behavior, or vice versa. This may cast doubt on the signatures, especially if you are not sure about a servers behavior at the specific point in time when the data was signed.
+
+Use timmy at your own risk.
+
 ### Input, Output, Signature and Certificates
 
 When you sign a document with timmy, you sign a SHA-256 hash. For convenience timmy will calculate this hash for you for your input file. Lets call this hash `H`. `H` is sent to the server in a special way and you will get some data back.
