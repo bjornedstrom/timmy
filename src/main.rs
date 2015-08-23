@@ -89,6 +89,7 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> i32 {
                 let valid_dates = ts >= parsed_cert.validity.0 && ts <= parsed_cert.validity.1;
 
                 if valid_dates {
+                    // Success!
                     println!("Signature verification SUCCESS.");
                     println!("Warning! Signature only verified against first X509 certificate.");
                     println!("Please verify yourself that the certificate chain is valid.");
@@ -176,9 +177,9 @@ fn main() {
     let program = args[0].clone();
     let mut opts = Options::new();
 
-    opts.optopt("v", "verify", "verify signature object", "PATH");
-    opts.optopt("f", "file", "input file to sign [-]", "PATH");
-    opts.optopt("s", "server", "set server for signing [www.google.com]", "HOSTNAME");
+    opts.optopt("V", "verify", "verify signature object", "PATH");
+    opts.optopt("S", "sign", "input file to sign [-]", "PATH");
+    opts.optopt("H", "host", "set server for signing [www.google.com]", "HOSTNAME");
     opts.optopt("p", "port", "set port for --server [443]", "PORT");
 
     opts.optflag("h", "help", "print this help menu");
@@ -197,9 +198,9 @@ fn main() {
         return;
     }
 
-    // parse "server"
-    let server = if matches.opt_present("s") {
-        matches.opt_str("s").unwrap()
+    // parse "host"
+    let server = if matches.opt_present("H") {
+        matches.opt_str("H").unwrap()
     } else {
         "www.google.com".to_string()
     };
@@ -218,14 +219,14 @@ fn main() {
         443
     };
 
-    if !matches.opt_present("v") {
+    if !matches.opt_present("V") {
         // sign
 
         // parse "file" and hash it
         let mut hasher = Sha256::new();
 
-        if matches.opt_present("f") {
-            let path = matches.opt_str("f").unwrap();
+        if matches.opt_present("S") {
+            let path = matches.opt_str("S").unwrap();
             let mut file_handle = match File::open(path) {
                 Ok(f) => f,
                 Err(s) => {
@@ -248,7 +249,7 @@ fn main() {
     } else {
         // verify
 
-        let path = matches.opt_str("v").unwrap();
+        let path = matches.opt_str("V").unwrap();
         let mut contents: Vec<u8> = Vec::new();
         let file_handle = File::open(path) ;
         file_handle.unwrap().read_to_end(&mut contents).unwrap();

@@ -11,14 +11,18 @@ This program is a **proof of concept**. Use this program at your own risk. See t
 
 ## Usage
 
-    $ timmy -f document > output.json
+To sign a document you do:
+
+    $ timmy --sign document > output.json
 	www.google.com signed SHA-256 bf921b493168a... at
 	  2015-08-22T20:04:24Z (Unix Timestamp: 1440273864)
-	
+
+To verify a document you do:
+
 	$ sha256sum document
 	bf921b493168a...  document
     
-    $ timmy -v output.json
+    $ timmy --verify output.json
     Signature verification SUCCESS.
     Warning! Signature only verified against first X509 certificate.
     Please verify yourself that the certificate chain is valid.
@@ -39,12 +43,12 @@ By default the program will use www.google.com:443 for signing, which as of writ
 
 timmy will detect these invalid servers and refuse to sign (TODO: implement similar for verification):
 
-    $ timmy -f document -s facebook.com
+    $ timmy --sign document --host facebook.com
 	ERROR! Server responded with invalid time! Aborting.
 
 A further gotcha is that many of the *valid* servers are configured with short lived certificates nowadays. For example Googles certificates are routinely only valid for a few months at most. On signature verification timmy will check that the timestamp signed falls within the valid dates. You may see this after a while:
 
-    $ timmy -v output.json
+    $ timmy --verify output.json
     ERROR! Signature verification FAILURE: Certificate has expired.
 
 Yet another gotcha is of course that a certificate may have been revoked. timmy will not check this for you.
