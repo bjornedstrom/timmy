@@ -3,6 +3,7 @@
 use chrono::datetime::DateTime;
 use chrono::naive::datetime::NaiveDateTime;
 use chrono::offset::utc::UTC;
+use crypto::digest::Digest;
 use std::io::Read;
 
 pub struct SimpleBinaryWriter {
@@ -127,4 +128,19 @@ pub fn to_hex_string(bytes: &Vec<u8>) -> String {
         .map(|b| format!("{:02x}", b))
         .collect();
     strs.connect("")
+}
+
+pub fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
+    let mut buf: [u8; 4096] = [0; 4096];
+
+    loop {
+        match file_handle.read(&mut buf) {
+            Ok(0) => { break }
+            Ok(size) => {
+                hasher.input(&mut buf[0..size]);
+            }
+            // Makes sense?
+            Err(_) => { break }
+        };
+    }
 }

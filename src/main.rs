@@ -165,21 +165,6 @@ fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> isize {
     0
 }
 
-fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
-    let mut buf: [u8; 4096] = [0; 4096];
-
-    loop {
-        match file_handle.read(&mut buf) {
-            Ok(0) => { break }
-            Ok(size) => {
-                hasher.input(&mut buf[0..size]);
-            }
-            // Makes sense?
-            Err(_) => { break }
-        };
-    }
-}
-
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
