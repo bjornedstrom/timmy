@@ -7,6 +7,7 @@ use num::bigint::{BigInt, Sign};
 #[derive(Debug)]
 pub enum ASN1Error {
     MissingData(String),
+    DecodeError(String),
 }
 
 pub type ASN1Result<T> = Result<T, ASN1Error>;
@@ -26,6 +27,20 @@ pub enum ASN1Type {
     PrintableString(String),
     UTF8String(String),
     UTCTime(String),
+}
+
+enum TypeId {
+    Null = 5,
+    Boolean = 1,
+    Sequence = 16,
+    Set = 17,
+    Integer = 2,
+    Object = 6,
+    BitString = 3,
+    OctetString = 4,
+    PrintableString = 19,
+    UTCTime = 23,
+    UTF8String = 12,
 }
 
 pub fn asn1_to_raw_string(obj: &ASN1Type) -> Option<String> {
@@ -99,6 +114,14 @@ impl DerParser {
         Ok((class_ as u8, p_c == 1, tag as u8, length as usize))
     }
 
+    fn parse_utf8_type(&self, raw: Vec<u8>) -> ASN1Result<String> {
+        if let Ok(string) = String::from_utf8(raw) {
+            Ok(string)
+        } else {
+            Err(ASN1Error::DecodeError("utf8 decode error".to_string()))
+        }
+    }
+
     pub fn parse_entry(&mut self) -> ASN1Result<ASN1Type> {
         try!(self.check_buffer());
 
@@ -132,38 +155,40 @@ impl DerParser {
 
         let raw = self.buf[pos..pos+length].iter().cloned().collect();
 
-        let entry = match tag {
-            5 => ASN1Type::Null,
-            1 => {
+        match tag {
+            tag if tag == TypeId::Null as u8 => Ok(ASN1Type::Null),
+            tag if tag == TypeId::Boolean as u8 => {
                 let buf: Vec<u8> = raw;
-                ASN1Type::Boolean(buf[0] == 0xff)
+                Ok(ASN1Type::Boolean(buf[0] == 0xff))
             }
-            16 => {
+            tag if tag == TypeId::Sequence as u8 => {
                 let mut sub_parser = DerParser::new(&raw);
                 let mut sequence = Vec::<ASN1Type>::new();
                 loop {
                     let sub_ent = sub_parser.parse_entry();
                     match sub_ent {
                         Err(ASN1Error::MissingData(_)) => { break },
+                        Err(err) => { return Err(err) }
                         Ok(ent) => { sequence.push(ent) }
                     }
                 }
-                ASN1Type::Sequence(sequence)
+                Ok(ASN1Type::Sequence(sequence))
             },
-            17 => {
+            tag if tag == TypeId::Set as u8 => {
                 let mut sub_parser = DerParser::new(&raw);
                 let mut sequence = Vec::<ASN1Type>::new();
                 loop {
                     let sub_ent = sub_parser.parse_entry();
                     match sub_ent {
                         Err(ASN1Error::MissingData(_)) => { break },
+                        Err(err) => { return Err(err) }
                         Ok(ent) => { sequence.push(ent) }
                     }
                 }
-                ASN1Type::Set(sequence)
+                Ok(ASN1Type::Set(sequence))
             },
-            2 => ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw)),
-            6 => {
+            tag if tag == TypeId::Integer as u8 => Ok(ASN1Type::Integer(BigInt::from_bytes_be(Sign::Plus, &raw))),
+            tag if tag == TypeId::Object as u8 => {
                 let mut oi = Vec::<u32>::new();
                 let obj_bytes = raw;
                 oi.push((obj_bytes[0] / 40) as u32);
@@ -186,19 +211,26 @@ impl DerParser {
                         oi.push((sub_id << 7) | next_sub_id);
                     }
                 }
-                ASN1Type::Object(vec_to_tup(&oi).expect("..."))
+                Ok(ASN1Type::Object(vec_to_tup(&oi).expect("...")))
             },
-            3 => ASN1Type::BitString(raw),
-            4 => ASN1Type::OctetString(raw),
-            19 => ASN1Type::PrintableString(String::from_utf8(raw).unwrap()),
-            23 => ASN1Type::UTCTime(String::from_utf8(raw).unwrap()),
-            12 => ASN1Type::UTF8String(String::from_utf8(raw).unwrap()),
+            tag if tag == TypeId::BitString as u8 => Ok(ASN1Type::BitString(raw)),
+            tag if tag == TypeId::OctetString as u8 => Ok(ASN1Type::OctetString(raw)),
+            tag if tag == TypeId::PrintableString as u8 => {
+                let string = try!(self.parse_utf8_type(raw));
+                Ok(ASN1Type::PrintableString(string))
+            },
+            tag if tag == TypeId::UTCTime as u8 => {
+                let string = try!(self.parse_utf8_type(raw));
+                Ok(ASN1Type::UTCTime(string))
+            },
+            tag if tag == TypeId::UTF8String as u8 => {
+                let string = try!(self.parse_utf8_type(raw));
+                Ok(ASN1Type::UTF8String(string))
+            },
             _ => {
                 println!("Got Unknown ASN1 Type {} {} {} {}", class_bits, constructed, tag, length);
-                ASN1Type::Unknown
+                Ok(ASN1Type::Unknown)
             }
-        };
-
-        Ok(entry)
+        }
     }
 }
