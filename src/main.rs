@@ -38,8 +38,6 @@ macro_rules! println_stderr(
     )
 );
 
-
-
 #[derive(RustcDecodable, RustcEncodable, Debug)]
 struct JsonOutput {
     blob: String,
@@ -47,59 +45,47 @@ struct JsonOutput {
     signature: String
 }
 
-
-fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
-
+fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> isize {
+    // Parse certificates
     let cert = X509Certificate::new(cert0.clone());
+    let parsed_cert = cert.parse().unwrap(); // XXX unwrap
 
-    let parsed = cert.parse().unwrap(); // XXX unwrap
-
+    // Check if certificate expired.
     let utc_now: DateTime<UTC> = UTC::now();
-
-    let cert_still_valid = utc_now >= parsed.validity.0 && utc_now <= parsed.validity.1;
-
+    let cert_still_valid = utc_now >= parsed_cert.validity.0 && utc_now <= parsed_cert.validity.1;
     if !cert_still_valid {
         println_stderr!("ERROR! Signature verification FAILURE: Certificate has expired.");
-        return;
+        return 1;
     }
 
-    //println!("{:?}", parsed);
-
-    match parsed.key {
+    match parsed_cert.key {
         PublicKey::RSA(rsa_n, rsa_e) => {
 
+            // Perform RSA signature operation
             let signature_int = BigUint::from_bytes_be(&signature);
             let sig_op = rsa_encrypt(&signature_int, &rsa_e,  &rsa_n);
 
-            // Account for missing leading 0x00
+            // Fix up PKCS1.5 blob
             let mut raw_pkcs1_ = sig_op.to_bytes_be();
             raw_pkcs1_.insert(0, 0x00);
             let raw_pkcs1 = raw_pkcs1_;
 
-            //println!("{}", estimate_bit_size(&rsa_n));
-
-            // the hash here in the PKCS1 structure is MD5(blob) || SHA1(blob)
-            // recall that the first part of blob is the SHA-256 hash
-            //println!("{:?}", to_hex_string(&raw_pkcs1));
-
-            // construct our own signature to compare against
+            // Construct our own PKCS 1.5 blob to compare against
             let tls_hash = weird_tls_hash(&blob);
             let constructed_pkcs1 = make_pkcs1_sig_padding(&rsa_n, &tls_hash);
 
-            //println!("{:?}", to_hex_string(&tls_hash));
-            //println!("{:?}", to_hex_string(&constructed_pkcs1));
-
             let valid_signature = crypto_compare(&constructed_pkcs1, &raw_pkcs1);
-            //println!("{:?}", valid_signature);
 
             if valid_signature {
+                // Signature is valid, parse out fields from blob.
                 let mut tls = TLSHandshake::new();
                 tls.client_random = blob[0..32].iter().cloned().collect();
                 tls.server_random = blob[32..64].iter().cloned().collect();
+
+                // Validate signed timestamp against certificate validity period.
                 let unix_timestamp = tls.get_unix_timestamp();
                 let ts = timestamp_to_datetime(unix_timestamp);
-
-                let valid_dates = ts >= parsed.validity.0 && ts <= parsed.validity.1;
+                let valid_dates = ts >= parsed_cert.validity.0 && ts <= parsed_cert.validity.1;
 
                 if valid_dates {
                     println!("Signature verification SUCCESS.");
@@ -107,77 +93,64 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
                     println!("Please verify yourself that the certificate chain is valid.");
                     println!("");
                     println!("{} Signed SHA-256 {} at {:?} (Unix Timestamp: {})",
-                             parsed.subject,
+                             parsed_cert.subject,
                              to_hex_string(&tls.client_random), ts, unix_timestamp);
                 } else {
                     println!("ERROR! Signature verification FAILURE: Invalid timestamp.");
+                    return 1;
                 }
 
             } else {
                 println!("ERROR! Signature verification FAILURE.");
+                return 1;
             }
         }
     }
 
+    0
 }
 
-
-fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
+fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> isize {
+    // Construct our special ClientHello message and send it to the server.
     let conn_str = format!("{}:{}", server, port);
-
-    //println!("conn_str {}", conn_str);
-
     let mut tcpconn = TcpStream::connect(&conn_str[..]).unwrap();
 
-    // Construct our special ClientHello message
     let mut ch = SimpleBinaryWriter::new();
     create_special_client_hello(&mut ch, &hash_buf);
 
     match tcpconn.write(&ch.buf) {
         Err(_) => {
-            panic!("write failure!!!");
+            println_stderr!("ERROR! Failed to write to server.");
+            return 1;
         }
         Ok(_) => {}
     }
 
+    // Parse the response.
     let mut pars = BinaryParser::new(&mut tcpconn);
     let mut tls = TLSHandshake::new();
 
-    // HACK
     tls.client_random.extend(hash_buf[0..32].iter());
 
-    // Parse ServerHello
     tls.parse_server_hello(&mut pars);
-
-    // Parse Certificates
     tls.parse_certificates(&mut pars);
-
-    // Parse ServerKeyExchange
     tls.parse_server_key_exchange(&mut pars);
 
-    // Output
-    //for cert in &tls.certs {
-    //    println!("cert {}", to_hex_string(cert.buf.clone()));
-    //}
-
+    // Extract timestamp and perform checks on it.
     let unix_timestamp = tls.get_unix_timestamp();
     let ts = timestamp_to_datetime(unix_timestamp);
 
     let utc_now: DateTime<UTC> = UTC::now();
     let utc_now_ts = utc_now.timestamp() as u32;
 
-    //println!("{} {}", utc_now_ts, unix_timestamp);
-
     if unix_timestamp < utc_now_ts - 3600 || unix_timestamp > utc_now_ts + 3600 {
         println_stderr!("ERROR! Server responded with invalid time! Aborting.");
-        return;
+        return 1;
     }
 
+    // Output banner and result JSON blob.
     println_stderr!("{} signed SHA-256 {} at {:?} (Unix Timestamp: {})",
                     server, to_hex_string(&hash_buf[0..32].iter().cloned().collect()), ts, unix_timestamp);
-
-    //println!("Blob: {}", to_hex_string(tls.signed_blob.clone()));
-    //println!("Signature: {}", to_hex_string(tls.signature.clone()));
 
     let json_output = JsonOutput {
         blob: tls.signed_blob.to_base64(STANDARD),
@@ -188,6 +161,8 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
     };
 
     println!("{}", json::encode(&json_output).unwrap());
+
+    0
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
@@ -288,8 +263,7 @@ fn main() {
         let mut hash_buf: [u8; 32] = [0; 32];
         hasher.result(&mut hash_buf);
 
-
-        perform(&server, &port, &hash_buf);
+        sign(&server, &port, &hash_buf);
     } else {
         // verify
 
