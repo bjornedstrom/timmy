@@ -380,7 +380,11 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) {
 
             let signature_int = BigUint::from_bytes_be(&signature);
             let sig_op = rsa_encrypt(&signature_int, &rsa_e,  &rsa_n);
-            let raw_pkcs1 = sig_op.to_bytes_be();
+
+            // Account for missing leading 0x00
+            let mut raw_pkcs1_ = sig_op.to_bytes_be();
+            raw_pkcs1_.insert(0, 0x00);
+            let raw_pkcs1 = raw_pkcs1_;
 
             //println!("{}", estimate_bit_size(&rsa_n));
 
