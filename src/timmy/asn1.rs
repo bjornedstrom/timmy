@@ -56,10 +56,16 @@ impl DerParser {
         }
     }
 
-    fn get_length(&mut self) -> ASN1Result<usize> {
+    fn check_buffer(&mut self) -> ASN1Result<()> {
         if self.idx >= self.buf.len() {
             return Err(ASN1Error::MissingData("length".to_string()));
         }
+        Ok(())
+    }
+
+    fn get_length(&mut self) -> ASN1Result<usize> {
+        try!(self.check_buffer());
+
         let len_tmp = self.buf[self.idx];
         if len_tmp <= 127 {
             self.idx += 1;
@@ -72,9 +78,7 @@ impl DerParser {
         self.idx += 1;
         for _ in 0..len_octets {
             length <<= 8;
-            if self.idx >= self.buf.len() {
-                return Err(ASN1Error::MissingData("length".to_string()));
-            }
+            try!(self.check_buffer());
             length |= self.buf[self.idx] as usize;
             self.idx += 1;
         }
@@ -82,11 +86,9 @@ impl DerParser {
     }
 
     fn parse_header(&mut self) -> ASN1Result<(u8, bool, u8, usize)> {
-        let c = self.buf[self.idx];
-        if self.idx >= self.buf.len() {
-            return Err(ASN1Error::MissingData("header".to_string()));
-        }
+        try!(self.check_buffer());
 
+        let c = self.buf[self.idx];
         let tag = c & 31;
         let p_c = (c >> 5) & 1;
         let class_ = (c >> 6) & 3;
@@ -98,9 +100,7 @@ impl DerParser {
     }
 
     pub fn parse_entry(&mut self) -> ASN1Result<ASN1Type> {
-        if self.idx >= self.buf.len() {
-            return Err(ASN1Error::MissingData("entry".to_string()));
-        }
+        try!(self.check_buffer());
 
         let (class_bits, constructed, tag, length) = try!(self.parse_header());
 
@@ -112,6 +112,8 @@ impl DerParser {
             2 => {
                 let pos = self.idx;
                 self.idx += length;
+
+                assert!(pos + length <= self.buf.len());
 
                 let sub_buf = self.buf[pos..pos+length].iter().cloned().collect();
                 let mut sub_parser = DerParser::new(&sub_buf);
@@ -125,6 +127,8 @@ impl DerParser {
 
         let pos = self.idx;
         self.idx += length;
+
+        assert!(pos + length <= self.buf.len());
 
         let raw = self.buf[pos..pos+length].iter().cloned().collect();
 
