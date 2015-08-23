@@ -1,5 +1,5 @@
 # timmy - Use some TLS servers for trusted timestamping
-0.0.0-DEVEL
+0.1.0-RC1
 
     <Development Status>2015-08-23: Program is getting somewhat functionally correct but code is still a bit messy and needs improvements, tests etc.</Development Status>
 
