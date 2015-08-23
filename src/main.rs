@@ -23,6 +23,7 @@ use std::io::Read;
 use std::io::Write;
 use std::io;
 use std::net::TcpStream;
+use std::process::exit;
 
 use timmy::rsa::*;
 use timmy::util::*;
@@ -45,7 +46,7 @@ struct JsonOutput {
     signature: String
 }
 
-fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> isize {
+fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> i32 {
     // Parse certificates
     let cert = X509Certificate::new(cert0.clone());
     let parsed_cert = cert.parse().unwrap(); // XXX unwrap
@@ -110,7 +111,7 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> isize {
     0
 }
 
-fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> isize {
+fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> i32 {
     // Construct our special ClientHello message and send it to the server.
     let conn_str = format!("{}:{}", server, port);
     let mut tcpconn = TcpStream::connect(&conn_str[..]).unwrap();
@@ -228,9 +229,8 @@ fn main() {
             let mut file_handle = match File::open(path) {
                 Ok(f) => f,
                 Err(s) => {
-                    println!("Reading file failed: {}", s);
-                    //print_usage(&program, opts);
-                    return;
+                    println_stderr!("Reading file failed: {}", s);
+                    exit(1);
                 }
             };
 
@@ -242,7 +242,9 @@ fn main() {
         let mut hash_buf: [u8; 32] = [0; 32];
         hasher.result(&mut hash_buf);
 
-        sign(&server, &port, &hash_buf);
+        let ret = sign(&server, &port, &hash_buf);
+
+        exit(ret);
     } else {
         // verify
 
@@ -259,6 +261,8 @@ fn main() {
         let cert0 = json_blob.certificates[0].from_base64().unwrap();
         let signature = json_blob.signature.from_base64().unwrap();
 
-        verify(&blob, &cert0, &signature);
+        let ret = verify(&blob, &cert0, &signature);
+
+        exit(ret);
     }
 }
