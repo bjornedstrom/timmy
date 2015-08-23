@@ -1,5 +1,8 @@
 //! Some utility stuff.
 
+use chrono::datetime::DateTime;
+use chrono::naive::datetime::NaiveDateTime;
+use chrono::offset::utc::UTC;
 use std::io::Read;
 
 pub struct SimpleBinaryWriter {
@@ -111,4 +114,17 @@ impl<'a> BinaryParser<'a> {
 
         raw[0]
     }
+}
+
+pub fn timestamp_to_datetime(unix_timestamp: u32) -> DateTime<UTC> {
+    let naive_ts = NaiveDateTime::from_timestamp(unix_timestamp as i64, 0);
+    let ts = DateTime::<UTC>::from_utc(naive_ts, UTC);
+    ts
+}
+
+pub fn to_hex_string(bytes: &Vec<u8>) -> String {
+    let strs: Vec<String> = bytes.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect();
+    strs.connect("")
 }

@@ -10,7 +10,6 @@ extern crate rustc_serialize;
 mod timmy;
 
 use chrono::datetime::DateTime;
-use chrono::naive::datetime::NaiveDateTime;
 use chrono::offset::utc::UTC;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -50,19 +49,6 @@ enum TLSHandshakeType {
     ServerHello = 2,
     Certificate = 11,
     ServerKeyExchange = 12,
-}
-
-fn timestamp_to_datetime(unix_timestamp: u32) -> DateTime<UTC> {
-    let naive_ts = NaiveDateTime::from_timestamp(unix_timestamp as i64, 0);
-    let ts = DateTime::<UTC>::from_utc(naive_ts, UTC);
-    ts
-}
-
-pub fn to_hex_string(bytes: &Vec<u8>) -> String {
-    let strs: Vec<String> = bytes.iter()
-        .map(|b| format!("{:02x}", b))
-        .collect();
-    strs.connect("")
 }
 
 
