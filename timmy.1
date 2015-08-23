@@ -4,10 +4,10 @@
 timmy \- use a TLS server for trusted timestamping
 .SH SYNOPSIS
 .B timmy
-.RI --sign\ FILE\ [\ --host\ HOST\ [\ --port\ PORT\ ]\ ]
+.RI --sign\ FILE\ [\ --host\ HOST\ [\ --port\ PORT\ ]\ ]\ >\ SIGNATURE-BLOB
 .PP
 .B timmy
-.RI --verify\ FILE
+.RI --verify\ SIGNATURE-BLOB
 .PP
 .B timmy
 .RI -h
@@ -16,4 +16,4 @@ Use TLS server given by \-\-host as a trusted timestamping server (defaults to w
 .SH SEE ALSO
 .BR https://github.com/bjornedstrom/timmy
 .SH AUTHOR
-perm was written by Bjorn Edstrom <be@bjrn.se>.
+timmy was written by Bjorn Edstrom <be@bjrn.se>.
