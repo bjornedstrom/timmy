@@ -15,7 +15,9 @@ To sign a document you do:
 
     $ timmy --sign document > output.json
 	www.google.com signed SHA-256 bf921b493168a... at
-	  2015-08-22T20:04:24Z (Unix Timestamp: 1440273864)
+	  2015-08-22T20:04:24Z (Unix Timestamp: 1440273864).
+	  Certificate used has SHA-1 fingerprint 07f8e9d3f...
+	  and expires 2015-11-10 00:00:00 UTC.
 
 To verify a document you do:
 

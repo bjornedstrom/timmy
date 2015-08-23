@@ -163,9 +163,20 @@ fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> i32 {
         return 1;
     }
 
+    // Parse certificate that signed.
+    let cert = X509Certificate::new(tls.certs[0].buf.clone());
+    let parsed_cert = match cert.parse() {
+        Ok(cert) => cert,
+        Err(e) => {
+            println_stderr!("ERROR! Failed to parse certificate: {:?}", e);
+            return 1;
+        }
+    };
+
     // Output banner and result JSON blob.
-    println_stderr!("{} signed SHA-256 {} at {:?} (Unix Timestamp: {})",
-                    server, to_hex_string(&hash_buf[0..32].iter().cloned().collect()), ts, unix_timestamp);
+    println_stderr!("{} signed SHA-256 {} at {:?} (Unix Timestamp: {}). Certificate used has SHA-1 fingerprint {} and expires {}.",
+                    server, to_hex_string(&hash_buf[0..32].iter().cloned().collect()),
+                    ts, unix_timestamp, to_hex_string(&tls.certs[0].sha1_fingerprint().unwrap()), parsed_cert.validity.1);
 
     let json_output = JsonOutput {
         blob: tls.signed_blob.to_base64(STANDARD),
