@@ -49,7 +49,13 @@ struct JsonOutput {
 fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> i32 {
     // Parse certificates
     let cert = X509Certificate::new(cert0.clone());
-    let parsed_cert = cert.parse().unwrap(); // XXX unwrap
+    let parsed_cert = match cert.parse() {
+        Ok(cert) => cert,
+        Err(e) => {
+            println_stderr!("ERROR! Failed to parse certificate: {:?}", e);
+            return 1;
+        }
+    };
 
     // Check if certificate expired.
     let utc_now: DateTime<UTC> = UTC::now();
@@ -115,7 +121,13 @@ fn verify(blob: &Vec<u8>, cert0: &Vec<u8>, signature: &Vec<u8>) -> i32 {
 fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> i32 {
     // Construct our special ClientHello message and send it to the server.
     let conn_str = format!("{}:{}", server, port);
-    let mut tcpconn = TcpStream::connect(&conn_str[..]).unwrap();
+    let mut tcpconn = match TcpStream::connect(&conn_str[..]) {
+        Ok(conn) => conn,
+        Err(err) => {
+            println_stderr!("ERROR! Failed to connect to server: {}", err);
+            return 1;
+        }
+    };
 
     let mut ch = SimpleBinaryWriter::new();
     create_special_client_hello(&mut ch, &hash_buf);
@@ -162,7 +174,15 @@ fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> i32 {
             ).collect(),
     };
 
-    println!("{}", json::encode(&json_output).unwrap());
+    match json::encode(&json_output) {
+        Ok(json) => {
+            println!("{}", json);
+        },
+        Err(_) => {
+            println_stderr!("ERROR! Failed to serialize json.");
+            return 1;
+        }
+    }
 
     0
 }
@@ -260,15 +280,47 @@ fn main() {
                 }
             };
 
-        file_handle.read_to_end(&mut contents).unwrap();
+        match file_handle.read_to_end(&mut contents) {
+            Err(s) => {
+                println_stderr!("Reading file failed: {}", s);
+                exit(1);
+            }
+            Ok(_) => {}
+        }
 
         let filestr = String::from_utf8(contents).unwrap();
 
-        let json_blob: JsonOutput = json::decode(&filestr).unwrap();
+        let json_blob: JsonOutput = match json::decode(&filestr) {
+            Ok(json) => { json },
+            Err(_) => {
+                println_stderr!("ERROR! Failed to deserialize json.");
+                exit(1);
+            }
+        };
 
-        let blob = json_blob.blob.from_base64().unwrap();
-        let cert0 = json_blob.certificates[0].from_base64().unwrap();
-        let signature = json_blob.signature.from_base64().unwrap();
+        let blob = match json_blob.blob.from_base64() {
+            Ok(res) => { res },
+            Err(_) => {
+                println_stderr!("ERROR! Failed to decode base64 for: blob");
+                exit(1);
+            }
+        };
+
+        let cert0 = match json_blob.certificates[0].from_base64() {
+            Ok(res) => { res },
+            Err(_) => {
+                println_stderr!("ERROR! Failed to decode base64 for: certificates[0]");
+                exit(1);
+            }
+        };
+
+        let signature = match json_blob.signature.from_base64() {
+            Ok(res) => { res },
+            Err(_) => {
+                println_stderr!("ERROR! Failed to decode base64 for: signature");
+                exit(1);
+            }
+        };
 
         let ret = verify(&blob, &cert0, &signature);
 
