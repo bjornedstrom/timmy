@@ -211,7 +211,11 @@ impl DerParser {
                         oi.push((sub_id << 7) | next_sub_id);
                     }
                 }
-                Ok(ASN1Type::Object(vec_to_tup(&oi).expect("...")))
+                if let Some(tup) = vec_to_tup(&oi) {
+                    Ok(ASN1Type::Object(tup))
+                } else {
+                    Err(ASN1Error::DecodeError("object decode error".to_string()))
+                }
             },
             tag if tag == TypeId::BitString as u8 => Ok(ASN1Type::BitString(raw)),
             tag if tag == TypeId::OctetString as u8 => Ok(ASN1Type::OctetString(raw)),
