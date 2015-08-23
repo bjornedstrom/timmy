@@ -16,8 +16,7 @@ use crypto::sha2::Sha256;
 use getopts::Options;
 use num::bigint::BigUint;
 use rustc_serialize::base64::{STANDARD, ToBase64, FromBase64};
-use rustc_serialize::json::{self, Json, ToJson};
-use std::collections::BTreeMap;
+use rustc_serialize::json::{self};
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -180,42 +179,15 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
     //println!("Blob: {}", to_hex_string(tls.signed_blob.clone()));
     //println!("Signature: {}", to_hex_string(tls.signature.clone()));
 
-    let mut obj = BTreeMap::new();
-    obj.insert("blob".to_string(), ((&*tls.signed_blob).to_base64(STANDARD)).to_json());
-    obj.insert("signature".to_string(), ((&*tls.signature).to_base64(STANDARD)).to_json());
+    let json_output = JsonOutput {
+        blob: tls.signed_blob.to_base64(STANDARD),
+        signature: tls.signature.to_base64(STANDARD),
+        certificates: tls.certs.iter().map(
+            |c| c.buf.to_base64(STANDARD)
+            ).collect(),
+    };
 
-    let mut cert_vec = Vec::new();
-    for cert in &tls.certs {
-        cert_vec.push(cert.buf.to_base64(STANDARD));
-    }
-    obj.insert("certificates".to_string(), cert_vec.to_json());
-
-    println!("{}", json::encode(&Json::Object(obj)).ok().expect("json"));
-
-    /*
-    {
-        let mut f = File::create("data.blob").ok().expect("fail.");
-        f.write_all(&*tls.signed_blob);
-    }
-
-    {
-        let mut f = File::create("data.signature").ok().expect("fail.");
-        f.write_all(&*tls.signature);
-    }
-
-    {
-        let mut f = File::create("data.certificate.der").ok().expect("fail.");
-        f.write_all(&*tls.certs[0].buf);
-    }
-    */
-
-    /*
-    let mut derparser = DerParser::new(&tls.certs[0].buf);
-
-    let asn1tree = derparser.parse_entry();
-    parse_x509(asn1tree.expect("..."));
-     */
-
+    println!("{}", json::encode(&json_output).unwrap());
 }
 
 fn hash_content<R: Read, D: Digest>(file_handle: &mut R, hasher: &mut D) {
