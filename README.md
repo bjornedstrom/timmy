@@ -69,6 +69,8 @@ The output when you sign is a JSON blob that contains three Base64 coded fields:
 
 ## Building
 
+This program is written in Rust. It has been tested with the 1.2.0 release.
+
     $ cargo build
 
 ## Appendix A: Signature Details
