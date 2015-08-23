@@ -5,6 +5,13 @@ use timmy::tup::*;
 use num::bigint::{BigInt, Sign};
 
 #[derive(Debug)]
+pub enum ASN1Error {
+    MissingData(String),
+}
+
+pub type ASN1Result<T> = Result<T, ASN1Error>;
+
+#[derive(Debug)]
 pub enum ASN1Type {
     Unknown,
     Cont(u8, Box<ASN1Type>),
@@ -36,7 +43,6 @@ pub fn asn1_to_raw_integer(obj: &ASN1Type) -> Option<BigInt> {
     }
 }
 
-
 pub struct DerParser {
     buf: Vec<u8>,
     idx: usize,
@@ -50,11 +56,14 @@ impl DerParser {
         }
     }
 
-    fn get_length(&mut self) -> usize {
+    fn get_length(&mut self) -> ASN1Result<usize> {
+        if self.idx >= self.buf.len() {
+            return Err(ASN1Error::MissingData("length".to_string()));
+        }
         let len_tmp = self.buf[self.idx];
         if len_tmp <= 127 {
             self.idx += 1;
-            return len_tmp as usize;
+            return Ok(len_tmp as usize);
         }
 
         let len_octets = len_tmp & 127;
@@ -63,38 +72,37 @@ impl DerParser {
         self.idx += 1;
         for _ in 0..len_octets {
             length <<= 8;
+            if self.idx >= self.buf.len() {
+                return Err(ASN1Error::MissingData("length".to_string()));
+            }
             length |= self.buf[self.idx] as usize;
             self.idx += 1;
         }
-        length
+        Ok(length)
     }
 
-    fn parse_header(&mut self) -> (u8, bool, u8, usize) {
+    fn parse_header(&mut self) -> ASN1Result<(u8, bool, u8, usize)> {
         let c = self.buf[self.idx];
+        if self.idx >= self.buf.len() {
+            return Err(ASN1Error::MissingData("header".to_string()));
+        }
+
         let tag = c & 31;
         let p_c = (c >> 5) & 1;
         let class_ = (c >> 6) & 3;
         assert!(tag != 31);
         self.idx += 1;
-        let length = self.get_length();
+        let length = try!(self.get_length());
 
-        //println!("{} {} {} {}", class_, p_c, tag, length);
-
-        (class_ as u8, p_c == 1, tag as u8, length as usize)
-
-        // ignore [ ]
-        //if tag == 2 {
-        //    self.idx += length;
-        //}
+        Ok((class_ as u8, p_c == 1, tag as u8, length as usize))
     }
 
-    pub fn parse_entry(&mut self) -> Option<ASN1Type> {
+    pub fn parse_entry(&mut self) -> ASN1Result<ASN1Type> {
         if self.idx >= self.buf.len() {
-            return None;
+            return Err(ASN1Error::MissingData("entry".to_string()));
         }
 
-
-        let (class_bits, constructed, tag, length) = self.parse_header();
+        let (class_bits, constructed, tag, length) = try!(self.parse_header());
 
         assert!(class_bits == 0 || class_bits == 2);
 
@@ -107,10 +115,11 @@ impl DerParser {
 
                 let sub_buf = self.buf[pos..pos+length].iter().cloned().collect();
                 let mut sub_parser = DerParser::new(&sub_buf);
-                return Some(ASN1Type::Cont(tag, Box::new( sub_parser.parse_entry().expect("...") )  ));
+                let sub_entry = try!(sub_parser.parse_entry());
+                return Ok(ASN1Type::Cont(tag, Box::new(sub_entry)));
             }
             _ => {
-                println!("wtf");
+                panic!("Parsing this not implemented.");
             }
         }
 
@@ -118,7 +127,6 @@ impl DerParser {
         self.idx += length;
 
         let raw = self.buf[pos..pos+length].iter().cloned().collect();
-
 
         let entry = match tag {
             5 => ASN1Type::Null,
@@ -132,8 +140,8 @@ impl DerParser {
                 loop {
                     let sub_ent = sub_parser.parse_entry();
                     match sub_ent {
-                        None => { break },
-                        Some(ent) => { sequence.push(ent) }
+                        Err(ASN1Error::MissingData(_)) => { break },
+                        Ok(ent) => { sequence.push(ent) }
                     }
                 }
                 ASN1Type::Sequence(sequence)
@@ -144,8 +152,8 @@ impl DerParser {
                 loop {
                     let sub_ent = sub_parser.parse_entry();
                     match sub_ent {
-                        None => { break },
-                        Some(ent) => { sequence.push(ent) }
+                        Err(ASN1Error::MissingData(_)) => { break },
+                        Ok(ent) => { sequence.push(ent) }
                     }
                 }
                 ASN1Type::Set(sequence)
@@ -182,13 +190,11 @@ impl DerParser {
             23 => ASN1Type::UTCTime(String::from_utf8(raw).unwrap()),
             12 => ASN1Type::UTF8String(String::from_utf8(raw).unwrap()),
             _ => {
-                println!("{} {} {} {}", class_bits, constructed, tag, length);
+                println!("Got Unknown ASN1 Type {} {} {} {}", class_bits, constructed, tag, length);
                 ASN1Type::Unknown
             }
         };
 
-        //println!("{:?}", entry);
-
-        Some(entry)
+        Ok(entry)
     }
 }

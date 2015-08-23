@@ -133,7 +133,7 @@ pub fn x509_parse_public_key_info(info: &ASN1Type) -> X509Result<PublicKey> {
             let bs_tree = derparser.parse_entry();
 
             //println!("bitstring: {:?}", bs_tree)
-            if let ASN1Type::Sequence(ref pk_seq) = bs_tree.expect("TODO") {
+            if let Ok(ASN1Type::Sequence(ref pk_seq)) = bs_tree {
                 match ai {
                     AlgorithmIdentifier::RSA => {
                         let rsa_n = asn1_to_raw_integer(&pk_seq[0]).expect("TODO");
@@ -181,7 +181,7 @@ impl X509Certificate {
         let mut derparser = DerParser::new(&self.buf);
 
         let asn1tree = derparser.parse_entry();
-        let tree = asn1tree.expect("...");
+        let tree = asn1tree.unwrap(); // XXX
 
         // Slice patterns are experimental right now, so lets do this
         // awkwardly.
