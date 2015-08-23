@@ -27,6 +27,11 @@ fn x509_oid_to_str(oid: &ASN1Type) -> String {
         &ASN1Type::Object(Tup::T4(2, 5, 4, 7)) => "L",
         &ASN1Type::Object(Tup::T4(2, 5, 4, 10)) => "O",
         &ASN1Type::Object(Tup::T4(2, 5, 4, 3)) => "CN",
+        &ASN1Type::Object(Tup::T4(2, 5, 4, 11)) => "OU",
+        &ASN1Type::Object(ref t) => {
+            println!("unknown({:?})", t);
+            "unknown"
+        },
         _ => "unknown"
     };
 
