@@ -1,0 +1,19 @@
+.\" -*- nroff -*-
+.TH TIMMY 1 "August 23, 2015"
+.SH TIMMY
+timmy \- use a TLS server for trusted timestamping
+.SH SYNOPSIS
+.B timmy
+.RI --sign\ FILE\ [\ --host\ HOST\ [\ --port\ PORT\ ]\ ]
+.PP
+.B timmy
+.RI --verify\ FILE
+.PP
+.B timmy
+.RI -h
+.SH DESCRIPTION
+Use TLS server given by \-\-host as a trusted timestamping server (defaults to www.google.com).
+.SH SEE ALSO
+.BR https://github.com/bjornedstrom/timmy
+.SH AUTHOR
+perm was written by Bjorn Edstrom <be@bjrn.se>.
