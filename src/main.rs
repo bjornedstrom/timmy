@@ -472,6 +472,17 @@ fn perform(server: &String, port: &u16, hash_buf: &[u8; 32]) {
 
     let unix_timestamp = tls.get_unix_timestamp();
     let ts = timestamp_to_datetime(unix_timestamp);
+
+    let utc_now: DateTime<UTC> = UTC::now();
+    let utc_now_ts = utc_now.timestamp() as u32;
+
+    //println!("{} {}", utc_now_ts, unix_timestamp);
+
+    if unix_timestamp < utc_now_ts - 3600 || unix_timestamp > utc_now_ts + 3600 {
+        println_stderr!("ERROR! Server responded with invalid time! Aborting.");
+        return;
+    }
+
     println_stderr!("{} signed SHA-256 {} at {:?} (Unix Timestamp: {})",
                     server, to_hex_string(&hash_buf[0..32].iter().cloned().collect()), ts, unix_timestamp);
 

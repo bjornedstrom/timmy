@@ -35,6 +35,11 @@ By default the program will use www.google.com:443 for signing, which as of writ
 * www.symantec.com:443
 * www.godaddy.com:443
 
+timmy will detect these invalid servers and refuse:
+
+    $ timmy -f document -s facebook.com
+	ERROR! Server responded with invalid time! Aborting.
+
 ### Attacks
 
 As mentioned above, not all TLS servers supply valid timestamps. This is true for many big websites, such as facebook.com or amazon.com. An attacker can abuse this by repeatedly sending requests to any of these servers until a desired (within some range) timestamp is returned. You should only accept signatures from servers you know are trustworthy in this regard.
