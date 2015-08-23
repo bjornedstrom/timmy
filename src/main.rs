@@ -251,8 +251,16 @@ fn main() {
 
         let path = matches.opt_str("V").unwrap();
         let mut contents: Vec<u8> = Vec::new();
-        let file_handle = File::open(path) ;
-        file_handle.unwrap().read_to_end(&mut contents).unwrap();
+
+        let mut file_handle = match File::open(path) {
+                Ok(f) => f,
+                Err(s) => {
+                    println_stderr!("Reading file failed: {}", s);
+                    exit(1);
+                }
+            };
+
+        file_handle.read_to_end(&mut contents).unwrap();
 
         let filestr = String::from_utf8(contents).unwrap();
 
