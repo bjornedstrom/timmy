@@ -1,0 +1,12 @@
+Source: timmy
+Section: utils
+Priority: extra
+Maintainer: Björn Edström <be@bjrn.se>
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.8.3
+
+Package: timmy
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: TLS trusted timestamping utility.
+ Use a TLS server as a trusted timestamping server.
