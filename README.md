@@ -45,6 +45,8 @@ A further gotcha is that many of the *valid* servers are configured with short l
     $ timmy -v output.json
     ERROR! Signature verification FAILURE: Certificate has expired.
 
+Yet another gotcha is of course that a certificate may have been revoked. timmy will not check this for you.
+
 ### Attacks
 
 As mentioned above, not all TLS servers supply valid timestamps. This is true for many big websites, such as facebook.com or amazon.com. An attacker can abuse this by repeatedly sending requests to any of these servers until a desired (within some range) timestamp is returned. You should only accept signatures from servers you know are trustworthy in this regard.
