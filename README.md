@@ -34,7 +34,7 @@ To verify a document you do:
 
 ### Gotchas
 
-By default the program will use www.google.com:443 for signing, which as of writing (August 2015) work correctly. Some TLS servers may use implementations that do not include a valid timestamp. RFC compliant implementations should include a timestamp but it's not required to be valid. See chapter 7.4.1.2 of RFC 5426 or RFC 2246 for details. Here's a short list of servers that work:
+By default the program will use www.google.com:443 for signing, which as of writing (August 2015) work correctly for our purpose. Some TLS servers may use implementations that do not include a valid timestamp, [such as recent versions of OpenSSL](http://git.openssl.org/gitweb/?p=openssl.git;a=commitdiff;h=2016265dfbab162ec30718b5e7480add42598158). RFC compliant implementations should include a timestamp but it's not required to be valid. See chapter 7.4.1.2 of RFC 5426 or RFC 2246 for details. Here's a short list of servers that work:
 
 * www.google.com:443
 * www.nsa.gov:443
@@ -42,7 +42,7 @@ By default the program will use www.google.com:443 for signing, which as of writ
 * www.symantec.com:443
 * www.godaddy.com:443
 
-timmy will detect these invalid servers and refuse to sign (TODO: implement similar for verification):
+timmy will detect "invalid" servers and refuse to sign (TODO: implement similar for verification):
 
     $ timmy --sign document --host facebook.com
 	ERROR! Server responded with invalid time! Aborting.
