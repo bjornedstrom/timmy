@@ -51,6 +51,9 @@ pub fn estimate_bit_size(bits: usize) -> usize {
 
 pub fn crypto_compare(buf_a: &Vec<u8>, buf_b: &Vec<u8>) -> bool {
     let mut equals = 0;
+    if buf_a.len() != buf_b.len() {
+        return false;
+    }
     for i in 0 .. buf_a.len() {
         equals |= buf_a[i] ^ buf_b[i];
     }
