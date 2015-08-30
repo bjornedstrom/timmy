@@ -147,9 +147,13 @@ fn sign(server: &String, port: &u16, hash_buf: &[u8; 32]) -> i32 {
 
     tls.client_random.extend(hash_buf[0..32].iter());
 
-    tls.parse_server_hello(&mut pars);
-    tls.parse_certificates(&mut pars);
-    tls.parse_server_key_exchange(&mut pars);
+    match tls.parse(&mut pars) {
+        Ok(_) => {},
+        Err(s) => {
+            println_stderr!("ERROR! {}", s);
+            exit(1);
+        }
+    }
 
     // Extract timestamp and perform checks on it.
     let unix_timestamp = tls.get_unix_timestamp();

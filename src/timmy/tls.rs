@@ -7,8 +7,10 @@ use crypto::sha1::Sha1;
 use timmy::util::*;
 use timmy::x509::*;
 
+pub type TLSResult<T> = Result<T, String>;
 
 pub enum TLSMessageType {
+    Alert = 21,
     Handshake = 22,
 }
 
@@ -18,7 +20,6 @@ pub enum TLSHandshakeType {
     Certificate = 11,
     ServerKeyExchange = 12,
 }
-
 
 pub struct TLSHandshake {
     pub client_random: Vec<u8>,
@@ -54,9 +55,36 @@ impl TLSHandshake {
         (raw[3] as u32)
     }
 
-    fn parse_header(&mut self, parser: &mut BinaryParser, expected: TLSHandshakeType) -> usize {
+    fn handle_alert(&mut self, parser: &mut BinaryParser, tls_type: u8) -> TLSResult<usize> {
+        if tls_type != TLSMessageType::Alert as u8 {
+            return Err("TLS error: Malformed protocol. Is this really a TLS server?".to_string())
+        }
+
+        assert!(tls_type == TLSMessageType::Alert as u8);
+
+        let _ = parser.read_u16(); // version
+        let _ = parser.read_u16(); // length
+
+        let level = parser.read_u8();
+        assert!(level >= 1 && level <= 2);
+
+        let description = parser.read_u8();
+
+        let level_str = match level {
+            1 => "WARNING",
+            2 => "FATAL",
+            _ => unreachable!(),
+        };
+
+        Err(format!("TLS error: most likely the server does not support the necessary signing behavior. (Alert: {}({}))", level_str, description))
+    }
+
+    fn parse_header(&mut self, parser: &mut BinaryParser, expected: TLSHandshakeType) -> TLSResult<usize> {
         // Common
         let tls_type = parser.read_u8();
+        if tls_type != TLSMessageType::Handshake as u8 {
+            try!(self.handle_alert(parser, tls_type));
+        }
         assert!(tls_type == TLSMessageType::Handshake as u8);
 
         let tls_version =  parser.read_u16();
@@ -70,11 +98,11 @@ impl TLSHandshake {
         let msg_length = parser.read_u24();
         assert!(msg_length as usize == (tls_length as usize) - 4);
 
-        msg_length as usize
+        Ok(msg_length as usize)
     }
 
-    pub fn parse_server_hello(&mut self, parser: &mut BinaryParser) {
-        let msg_length = self.parse_header(parser, TLSHandshakeType::ServerHello);
+    pub fn parse_server_hello(&mut self, parser: &mut BinaryParser) -> TLSResult<()> {
+        let msg_length = try!(self.parse_header(parser, TLSHandshakeType::ServerHello));
 
         // ServerHello
         let _ /*version*/ = parser.read_u16();
@@ -88,10 +116,12 @@ impl TLSHandshake {
         let _ /*compression*/ = parser.read_u8();
 
         assert!(msg_length == 2 + 32 + 1 + session_size + 2 + 1);
+
+        Ok(())
     }
 
-    pub fn parse_certificates(&mut self, parser: &mut BinaryParser) {
-        let msg_length = self.parse_header(parser, TLSHandshakeType::Certificate);
+    pub fn parse_certificates(&mut self, parser: &mut BinaryParser) -> TLSResult<()> {
+        let msg_length = try!(self.parse_header(parser, TLSHandshakeType::Certificate));
 
         // Payload
         let mut length = parser.read_u24() as usize;
@@ -109,10 +139,12 @@ impl TLSHandshake {
         }
 
         assert!(length == 0);
+
+        Ok(())
     }
 
-    pub fn parse_server_key_exchange(&mut self, parser: &mut BinaryParser) {
-        let msg_length = self.parse_header(parser, TLSHandshakeType::ServerKeyExchange);
+    pub fn parse_server_key_exchange(&mut self, parser: &mut BinaryParser) -> TLSResult<()> {
+        let msg_length = try!(self.parse_header(parser, TLSHandshakeType::ServerKeyExchange));
 
         let ecc_params = match self.cipher {
             0xc011 | 0xc012 | 0xc013 | 0xc014 => true,
@@ -148,6 +180,16 @@ impl TLSHandshake {
         self.signature.extend(signature.clone());
 
         assert!(msg_length == enc_buf_len + 2 + sig_len);
+
+        Ok(())
+    }
+
+    pub fn parse(&mut self, parser: &mut BinaryParser) -> TLSResult<()> {
+        try!(self.parse_server_hello(parser));
+        try!(self.parse_certificates(parser));
+        try!(self.parse_server_key_exchange(parser));
+
+        Ok(())
     }
 }
 
